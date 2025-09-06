@@ -266,8 +266,9 @@
         <div id="chatInterface" class="hidden">
             <div class="instructions">
                 <strong>Room Code: <span id="currentRoomCode"></span></strong> (share this with your contacts)<br>
-                <strong>Setup:</strong> Add contacts' public keys below, then start chatting<br>
-                <strong>Privacy:</strong> All encryption happens in your browser - messages are sent to all contacts
+                <strong>Setup:</strong> Add participants' public keys to this room, then start group chatting<br>
+                <strong>Privacy:</strong> All encryption happens in your browser - messages are sent to all room
+                participants
             </div>
 
             <div class="chat-area">
@@ -275,7 +276,7 @@
                 <div id="messages" class="messages"></div>
                 <div>
                     <textarea id="newMessage" placeholder="Type your message here..." rows="3"></textarea>
-                    <button onclick="sendMessage()">Send to All Contacts</button>
+                    <button onclick="sendMessage()">Send to Room</button>
                     <button onclick="leaveRoom()">Leave Room</button>
                 </div>
             </div>
@@ -290,23 +291,23 @@
                 </div>
 
                 <div class="panel">
-                    <h2>Contacts' Public Keys</h2>
+                    <h2>Room Participants</h2>
                     <div style="margin-bottom: 10px;">
-                        <input type="text" id="contactName" placeholder="Contact name (e.g., Alice, Bob)"
+                        <input type="text" id="participantName" placeholder="Participant name (e.g., Alice, Bob)"
                             style="margin-bottom: 5px;">
-                        <textarea id="newContactKey" class="key-input"
-                            placeholder="Paste contact's public key here"></textarea>
-                        <button onclick="addContact()">Add Contact</button>
+                        <textarea id="newParticipantKey" class="key-input"
+                            placeholder="Paste participant's public key here"></textarea>
+                        <button onclick="addParticipant()">Add to Room</button>
                     </div>
 
                     <div
                         style="border: 1px solid #999; max-height: 150px; overflow-y: auto; padding: 5px; background-color: white;">
-                        <div id="contactsList" style="font-size: 12px;">
-                            <div style="color: #666; font-style: italic;">No contacts added yet</div>
+                        <div id="participantsList" style="font-size: 12px;">
+                            <div style="color: #666; font-style: italic;">No participants in this room yet</div>
                         </div>
                     </div>
 
-                    <div id="contactsStatus"></div>
+                    <div id="participantsStatus"></div>
                 </div>
             </div>
 
@@ -333,7 +334,6 @@
         let currentRoom = null;
         let unsubscribeMessages = null;
         let userId = null;
-        let contacts = {}; // Store contacts: {name: publicKey}
 
         // Generate a unique user ID for this session
         function generateUserId() {
@@ -368,6 +368,7 @@
                     created: Date.now(),
                     messageCount: 0,
                     messages: [],
+                    participants: {},
                     publicKeys: {}
                 });
 
@@ -421,10 +422,6 @@
 
             currentRoom = null;
             userId = null;
-            contacts = {}; // Clear contacts when leaving
-
-            // Clear the UI
-            updateContactsList();
 
             document.getElementById('roomSelection').classList.remove('hidden');
             document.getElementById('chatInterface').classList.add('hidden');
@@ -456,72 +453,49 @@
             }
         }
 
-        function addContact() {
-            const name = document.getElementById('contactName').value.trim();
-            const key = document.getElementById('newContactKey').value.trim();
+        async function addParticipant() {
+            await waitForFirestore();
+
+            const name = document.getElementById('participantName').value.trim();
+            const key = document.getElementById('newParticipantKey').value.trim();
 
             if (!name) {
-                document.getElementById('contactsStatus').innerHTML = '<div class="error">Please enter a contact name</div>';
+                document.getElementById('participantsStatus').innerHTML = '<div class="error">Please enter a participant name</div>';
                 return;
             }
 
             if (!key) {
-                document.getElementById('contactsStatus').innerHTML = '<div class="error">Please enter the contact\'s public key</div>';
+                document.getElementById('participantsStatus').innerHTML = '<div class="error">Please enter the participant\'s public key</div>';
                 return;
             }
 
             if (!key.includes('BEGIN PGP PUBLIC KEY')) {
-                document.getElementById('contactsStatus').innerHTML = '<div class="error">Invalid PGP public key format</div>';
+                document.getElementById('participantsStatus').innerHTML = '<div class="error">Invalid PGP public key format</div>';
                 return;
             }
 
-            // Check for duplicates
-            if (contacts[name]) {
-                document.getElementById('contactsStatus').innerHTML = '<div class="error">Contact name already exists</div>';
-                return;
+            try {
+                // Check if participant already exists
+                const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
+                const roomData = roomDoc.data();
+                const participants = roomData.participants || {};
+
+                if (participants[name]) {
+                    document.getElementById('participantsStatus').innerHTML = '<div class="error">Participant name already exists in this room</div>';
+                    return;
+                }
+
+                await updateDoc(doc(db, 'rooms', currentRoom), {
+                    [`participants.${name}`]: key
+                });
+
+                document.getElementById('participantName').value = '';
+                document.getElementById('newParticipantKey').value = '';
+                document.getElementById('participantsStatus').innerHTML = `<div class="success">Participant "${name}" added to room!</div>`;
+
+            } catch (error) {
+                document.getElementById('participantsStatus').innerHTML = `<div class="error">Failed to add participant: ${error.message}</div>`;
             }
-
-            // Add to contacts list
-            contacts[name] = key;
-
-            // Update display
-            updateContactsList();
-
-            // Clear inputs
-            document.getElementById('contactName').value = '';
-            document.getElementById('newContactKey').value = '';
-
-            document.getElementById('contactsStatus').innerHTML = `<div class="success">Contact "${name}" added!</div>`;
-        }
-
-        function updateContactsList() {
-            const listDiv = document.getElementById('contactsList');
-
-            if (Object.keys(contacts).length === 0) {
-                listDiv.innerHTML = '<div style="color: #666; font-style: italic;">No contacts added yet</div>';
-                return;
-            }
-
-            listDiv.innerHTML = '';
-
-            Object.keys(contacts).forEach(name => {
-                const contactDiv = document.createElement('div');
-                contactDiv.style.cssText = 'border-bottom: 1px solid #eee; padding: 5px; margin-bottom: 5px;';
-                contactDiv.innerHTML = `
-                    <strong>${name}</strong>
-                    <button onclick="removeContact('${name}')" style="float: right; font-size: 10px; padding: 2px 5px;">Remove</button>
-                    <div style="font-size: 10px; color: #666; margin-top: 2px; word-break: break-all;">
-                        ${contacts[name].substring(0, 50)}...
-                    </div>
-                `;
-                listDiv.appendChild(contactDiv);
-            });
-        }
-
-        function removeContact(name) {
-            delete contacts[name];
-            updateContactsList();
-            document.getElementById('contactsStatus').innerHTML = `<div class="success">Contact "${name}" removed</div>`;
         }
 
         function saveDecryptionKey() {
@@ -541,59 +515,63 @@
 
         async function sendMessage() {
             await waitForFirestore();
-
+            
             const messageText = document.getElementById('newMessage').value.trim();
-
+            
             if (!messageText) {
                 alert('Please enter a message');
                 return;
             }
 
-            if (Object.keys(contacts).length === 0) {
-                alert('Please add at least one contact before sending messages');
-                return;
-            }
-
             try {
-                // Create encrypted messages for all contacts
-                const encryptedMessages = [];
+                // Get current room participants
+                const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
+                const roomData = roomDoc.data();
+                const participants = roomData.participants || {};
+                
+                if (Object.keys(participants).length === 0) {
+                    alert('No participants in this room yet. Add participants first.');
+                    return;
+                }
 
-                for (const [contactName, contactKey] of Object.entries(contacts)) {
+                // Encrypt message for all participants
+                const encryptedMessages = [];
+                
+                for (const [participantName, participantKey] of Object.entries(participants)) {
                     try {
-                        const publicKey = await openpgp.readKey({ armoredKey: contactKey });
+                        const publicKey = await openpgp.readKey({ armoredKey: participantKey });
                         const encrypted = await openpgp.encrypt({
                             message: await openpgp.createMessage({ text: messageText }),
                             encryptionKeys: publicKey
                         });
-
+                        
                         encryptedMessages.push({
                             id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                             timestamp: Date.now(),
                             encrypted: encrypted,
                             sender: userId,
-                            recipient: contactName
+                            recipient: participantName
                         });
                     } catch (error) {
-                        console.error(`Failed to encrypt message for ${contactName}:`, error);
+                        console.error(`Failed to encrypt for ${ participantName }: `, error);
                     }
                 }
 
                 if (encryptedMessages.length === 0) {
-                    alert('Failed to encrypt message for any contacts');
+                    alert('Failed to encrypt message for any participants');
                     return;
                 }
 
-                // Store all encrypted messages in Firestore
                 await updateDoc(doc(db, 'rooms', currentRoom), {
                     messages: arrayUnion(...encryptedMessages),
                     messageCount: increment(encryptedMessages.length),
                     lastActivity: Date.now()
                 });
-
+                
                 document.getElementById('newMessage').value = '';
-
+                
             } catch (error) {
-                alert(`Failed to send message: ${error.message}`);
+                alert(`Failed to send message: ${ error.message } `);
             }
         }
 
@@ -604,13 +582,35 @@
                 if (doc.exists()) {
                     const data = doc.data();
                     displayMessages(data.messages || []);
-                    document.getElementById('messageStatus').textContent = `(${data.messageCount || 0} messages)`;
+                    displayParticipants(data.participants || {});
+                    document.getElementById('messageStatus').textContent = `(${ data.messageCount || 0 } messages)`;
                 } else {
                     document.getElementById('messageStatus').textContent = '(Room not found)';
                 }
             }, (error) => {
                 document.getElementById('messageStatus').textContent = '(Connection error)';
                 console.error('Message listener error:', error);
+            });
+        }
+
+        function displayParticipants(participants) {
+            const listDiv = document.getElementById('participantsList');
+            
+            if (!participants || Object.keys(participants).length === 0) {
+                listDiv.innerHTML = '<div style="color: #666; font-style: italic;">No participants in this room yet</div>';
+                return;
+            }
+            
+            listDiv.innerHTML = '';
+            
+            Object.keys(participants).forEach(name => {
+                const participantDiv = document.createElement('div');
+                participantDiv.style.cssText = 'border-bottom: 1px solid #eee; padding: 5px; margin-bottom: 5px;';
+                participantDiv.innerHTML = `
+                    < strong > ${ name }</strong >
+                        <div style="font-size: 10px; color: #666; margin-top: 2px;">Room participant</div>
+                `;
+                listDiv.appendChild(participantDiv);
             });
         }
 
@@ -632,10 +632,10 @@
 
                 const time = new Date(msg.timestamp).toLocaleTimeString();
                 const senderLabel = msg.sender === userId ? 'you' : 'contact';
-                const recipientInfo = msg.recipient ? ` → ${msg.recipient}` : '';
+                const recipientInfo = msg.recipient ? ` → ${ msg.recipient } ` : '';
 
                 messageDiv.innerHTML = `
-                    <div class="message-time">${time} - ${senderLabel}${recipientInfo}</div>
+                    < div class="message-time" > ${ time } - ${ senderLabel }${ recipientInfo }</div >
                     <div style="font-size: 10px; word-break: break-all; margin-top: 5px;">${msg.encrypted.substring(0, 100)}...</div>
                     <button onclick="decryptMessage('${msg.id}')" style="margin-top: 5px; font-size: 11px;">Decrypt</button>
                     <div id="decrypted_${msg.id}" style="margin-top: 5px; color: #006600; font-weight: bold;"></div>
@@ -662,7 +662,7 @@
                 const message = data.messages.find(msg => msg.id === messageId);
 
                 if (!message) {
-                    document.getElementById(`decrypted_${messageId}`).innerHTML = '<span style="color: red;">Message not found</span>';
+                    document.getElementById(`decrypted_${ messageId } `).innerHTML = '<span style="color: red;">Message not found</span>';
                     return;
                 }
 
@@ -678,10 +678,10 @@
                     decryptionKeys: decryptedKey
                 });
 
-                document.getElementById(`decrypted_${messageId}`).textContent = decrypted;
+                document.getElementById(`decrypted_${ messageId } `).textContent = decrypted;
 
             } catch (error) {
-                document.getElementById(`decrypted_${messageId}`).innerHTML = `<span style="color: red;">Decryption failed: ${error.message}</span>`;
+                document.getElementById(`decrypted_${ messageId } `).innerHTML = ` < span style = "color: red;" > Decryption failed: ${ error.message }</span >`;
             }
         }
     </script>
