@@ -12,6 +12,7 @@
             margin: 20px;
             background-color: #f0f0f0;
         }
+
         .container {
             max-width: 1000px;
             margin: 0 auto;
@@ -19,33 +20,94 @@
             padding: 20px;
             border: 2px solid #666;
         }
+
         h1 {
             text-align: center;
             color: #333;
             margin-bottom: 10px;
         }
-        .instructions {
+
+        .room-selection {
             background-color: #ffffcc;
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .room-input {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+            margin: 15px 0;
+        }
+
+        .room-code {
+            font-family: monospace;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            padding: 10px;
+            border: 2px solid #999;
+            background-color: #f9f9f9;
+        }
+
+        .instructions {
+            background-color: #e6f3ff;
             border: 1px solid #ccc;
             padding: 15px;
             margin-bottom: 20px;
         }
+
+        .chat-area {
+            border: 2px solid #999;
+            background-color: #fafafa;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .messages {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: white;
+            margin-bottom: 15px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .message-item {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .message-time {
+            color: #666;
+            font-size: 10px;
+        }
+
         .panels {
             display: flex;
             gap: 20px;
         }
+
         .panel {
             flex: 1;
             border: 2px solid #999;
             padding: 15px;
             background-color: #fafafa;
         }
+
         .panel h2 {
             margin-top: 0;
             color: #444;
             border-bottom: 1px solid #ccc;
             padding-bottom: 5px;
         }
+
         textarea {
             width: 100%;
             box-sizing: border-box;
@@ -55,6 +117,8 @@
             padding: 5px;
             margin-bottom: 10px;
         }
+
+        input[type="text"],
         input[type="password"] {
             width: 100%;
             box-sizing: border-box;
@@ -63,15 +127,19 @@
             padding: 5px;
             margin-bottom: 10px;
         }
+
         .message-input {
             height: 80px;
         }
+
         .key-input {
-            height: 120px;
+            height: 100px;
         }
+
         .output {
-            height: 150px;
+            height: 100px;
         }
+
         button {
             background-color: #ddd;
             border: 2px outset #ddd;
@@ -79,13 +147,17 @@
             font-size: 14px;
             cursor: pointer;
             margin-bottom: 10px;
+            margin-right: 10px;
         }
+
         button:hover {
             background-color: #ccc;
         }
+
         button:active {
             border: 2px inset #ddd;
         }
+
         .error {
             color: red;
             background-color: #ffe6e6;
@@ -93,6 +165,7 @@
             padding: 10px;
             margin-top: 10px;
         }
+
         .success {
             color: green;
             background-color: #e6ffe6;
@@ -100,12 +173,14 @@
             padding: 10px;
             margin-top: 10px;
         }
+
         label {
             font-weight: bold;
             display: block;
             margin-top: 10px;
             margin-bottom: 5px;
         }
+
         .footer {
             text-align: center;
             margin-top: 30px;
@@ -114,14 +189,24 @@
             color: #666;
             font-size: 12px;
         }
+
         .passphrase-note {
             font-size: 11px;
             color: #666;
             margin-top: -5px;
             margin-bottom: 10px;
         }
+
+        .hidden {
+            display: none;
+        }
+
         @media (max-width: 768px) {
             .panels {
+                flex-direction: column;
+            }
+
+            .room-input {
                 flex-direction: column;
             }
         }
@@ -132,57 +217,64 @@
     <div class="container">
         <h1>inconvenient-chat</h1>
 
-        <div class="instructions">
-            <strong>Instructions:</strong><br>
-            • Encrypt: Paste recipient's public key + plain text message → get ciphertext<br>
-            • Decrypt: Paste your private key + ciphertext → get plain text message<br><br>
-            <strong>Privacy:</strong><br>
-            • Your keys never leave this page - all encryption and decryption happen in your browser<br>
-            • Feel free to inspect the code (<i>right click → inspect</i> in most browsers). All code is in
-            index.html
+        <div id="roomSelection" class="room-selection">
+            <h2>Create or Join Chat Room</h2>
+            <div class="room-input">
+                <button onclick="createRoom()">Create New Room</button>
+                <span>or</span>
+                <input type="text" id="joinRoomCode" placeholder="Enter 6-digit room code" maxlength="6">
+                <button onclick="joinRoom()">Join Room</button>
+            </div>
+            <div id="roomStatus"></div>
         </div>
 
-        <div class="panels">
-            <div class="panel">
-                <h2>Encrypt</h2>
-
-                <label for="message">Message to send:</label>
-                <textarea id="message" class="message-input" placeholder="Enter your message here..."></textarea>
-
-                <label for="recipientKey">Recipient's Public Key:</label>
-                <textarea id="recipientKey" class="key-input"
-                    placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
-
-                <button onclick="encryptMessage()">Encrypt</button>
-
-                <label for="cipherOutput">Ciphertext (copy and send to recipient):</label>
-                <textarea id="cipherOutput" class="output" readonly></textarea>
-
-                <div id="encryptStatus"></div>
+        <div id="chatInterface" class="hidden">
+            <div class="instructions">
+                <strong>Room Code: <span id="currentRoomCode"></span></strong> (share this with your contact)<br>
+                <strong>Setup:</strong> Both users must paste their public keys below before chatting<br>
+                <strong>Privacy:</strong> All encryption happens in your browser - messages are stored locally only
             </div>
 
-            <div class="panel">
-                <h2>Decrypt</h2>
+            <div class="chat-area">
+                <h2>Chat Messages</h2>
+                <div id="messages" class="messages"></div>
+                <div>
+                    <textarea id="newMessage" placeholder="Type your message here..." rows="3"></textarea>
+                    <button onclick="sendMessage()">Send Encrypted Message</button>
+                    <button onclick="refreshMessages()">Refresh</button>
+                    <button onclick="leaveRoom()">Leave Room</button>
+                </div>
+            </div>
 
-                <label for="cipherInput">Ciphertext (garbled text you received):</label>
-                <textarea id="cipherInput" class="key-input"
-                    placeholder="-----BEGIN PGP MESSAGE-----&#10;&#10;&#10;&#10;-----END PGP MESSAGE-----"></textarea>
+            <div class="panels">
+                <div class="panel">
+                    <h2>Your Public Key</h2>
+                    <textarea id="myPublicKey" class="key-input"
+                        placeholder="Paste your public key here so others can encrypt messages to you"></textarea>
+                    <button onclick="saveMyPublicKey()">Save My Public Key</button>
+                    <div id="myKeyStatus"></div>
+                </div>
 
-                <label for="privateKey">Your Private Key:</label>
-                <textarea id="privateKey" class="key-input"
-                    placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----&#10;&#10;&#10;&#10;-----END PGP PRIVATE KEY BLOCK-----"></textarea>
+                <div class="panel">
+                    <h2>Contact's Public Key</h2>
+                    <textarea id="contactPublicKey" class="key-input"
+                        placeholder="Paste your contact's public key here to encrypt messages to them"></textarea>
+                    <button onclick="saveContactKey()">Save Contact's Key</button>
+                    <div id="contactKeyStatus"></div>
+                </div>
+            </div>
 
-                <label for="passphrase">Passphrase (leave blank if no passphrase):</label>
-                <div class="passphrase-note">Enter the passphrase that protects your private key, or leave empty if your
-                    key has no passphrase</div>
-                <input type="password" id="passphrase" placeholder="Enter passphrase or leave blank...">
-
-                <button onclick="decryptMessage()">Decrypt</button>
-
-                <label for="plaintextOutput">Plaintext (the original message):</label>
-                <textarea id="plaintextOutput" class="output" readonly></textarea>
-
-                <div id="decryptStatus"></div>
+            <div class="panels">
+                <div class="panel">
+                    <h2>Decrypt Messages</h2>
+                    <label for="privateKey">Your Private Key:</label>
+                    <textarea id="privateKey" class="key-input"
+                        placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----"></textarea>
+                    <label for="passphrase">Passphrase (leave blank if no passphrase):</label>
+                    <input type="password" id="passphrase" placeholder="Enter passphrase or leave blank...">
+                    <button onclick="saveDecryptionKey()">Save Decryption Key</button>
+                    <div id="decryptKeyStatus"></div>
+                </div>
             </div>
         </div>
 
@@ -192,88 +284,222 @@
     </div>
 
     <script>
-        async function encryptMessage() {
-            const message = document.getElementById('message').value.trim();
-            const recipientKeyText = document.getElementById('recipientKey').value.trim();
-            const outputEl = document.getElementById('cipherOutput');
-            const statusEl = document.getElementById('encryptStatus');
+        let currentRoom = null;
+        let refreshInterval = null;
 
-            // Clear previous results
-            outputEl.value = '';
-            statusEl.innerHTML = '';
+        function generateRoomCode() {
+            return Math.floor(100000 + Math.random() * 900000).toString();
+        }
 
-            if (!message) {
-                statusEl.innerHTML = '<div class="error">Please enter a message to encrypt</div>';
+        function createRoom() {
+            const roomCode = generateRoomCode();
+            localStorage.setItem(`room_${roomCode}`, JSON.stringify({
+                created: Date.now(),
+                messages: [],
+                myPublicKey: '',
+                contactPublicKey: ''
+            }));
+
+            enterRoom(roomCode);
+            document.getElementById('roomStatus').innerHTML = '<div class="success">Room created successfully!</div>';
+        }
+
+        function joinRoom() {
+            const roomCode = document.getElementById('joinRoomCode').value.trim();
+            if (!roomCode || roomCode.length !== 6) {
+                document.getElementById('roomStatus').innerHTML = '<div class="error">Please enter a valid 6-digit room code</div>';
                 return;
             }
 
-            if (!recipientKeyText) {
-                statusEl.innerHTML = '<div class="error">Please enter the recipient\'s public key</div>';
+            const roomData = localStorage.getItem(`room_${roomCode}`);
+            if (!roomData) {
+                document.getElementById('roomStatus').innerHTML = '<div class="error">Room not found. Make sure the code is correct.</div>';
+                return;
+            }
+
+            enterRoom(roomCode);
+            document.getElementById('roomStatus').innerHTML = '<div class="success">Joined room successfully!</div>';
+        }
+
+        function enterRoom(roomCode) {
+            currentRoom = roomCode;
+            document.getElementById('roomSelection').classList.add('hidden');
+            document.getElementById('chatInterface').classList.remove('hidden');
+            document.getElementById('currentRoomCode').textContent = roomCode;
+
+            loadRoomData();
+            startRefreshInterval();
+        }
+
+        function leaveRoom() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+
+            currentRoom = null;
+            document.getElementById('roomSelection').classList.remove('hidden');
+            document.getElementById('chatInterface').classList.add('hidden');
+            document.getElementById('joinRoomCode').value = '';
+            document.getElementById('roomStatus').innerHTML = '';
+        }
+
+        function loadRoomData() {
+            const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`));
+            if (roomData) {
+                document.getElementById('myPublicKey').value = roomData.myPublicKey || '';
+                document.getElementById('contactPublicKey').value = roomData.contactPublicKey || '';
+                displayMessages(roomData.messages);
+            }
+        }
+
+        function saveRoomData(updates) {
+            const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`)) || {};
+            Object.assign(roomData, updates);
+            localStorage.setItem(`room_${currentRoom}`, JSON.stringify(roomData));
+        }
+
+        function saveMyPublicKey() {
+            const key = document.getElementById('myPublicKey').value.trim();
+            if (!key) {
+                document.getElementById('myKeyStatus').innerHTML = '<div class="error">Please enter your public key</div>';
+                return;
+            }
+
+            saveRoomData({ myPublicKey: key });
+            document.getElementById('myKeyStatus').innerHTML = '<div class="success">Your public key saved!</div>';
+        }
+
+        function saveContactKey() {
+            const key = document.getElementById('contactPublicKey').value.trim();
+            if (!key) {
+                document.getElementById('contactKeyStatus').innerHTML = '<div class="error">Please enter contact\'s public key</div>';
+                return;
+            }
+
+            saveRoomData({ contactPublicKey: key });
+            document.getElementById('contactKeyStatus').innerHTML = '<div class="success">Contact\'s key saved!</div>';
+        }
+
+        function saveDecryptionKey() {
+            // Just validate the key format
+            const privateKey = document.getElementById('privateKey').value.trim();
+            if (!privateKey) {
+                document.getElementById('decryptKeyStatus').innerHTML = '<div class="error">Please enter your private key</div>';
+                return;
+            }
+
+            document.getElementById('decryptKeyStatus').innerHTML = '<div class="success">Decryption key ready!</div>';
+        }
+
+        async function sendMessage() {
+            const messageText = document.getElementById('newMessage').value.trim();
+            const contactKey = document.getElementById('contactPublicKey').value.trim();
+
+            if (!messageText) {
+                alert('Please enter a message');
+                return;
+            }
+
+            if (!contactKey) {
+                alert('Please save your contact\'s public key first');
                 return;
             }
 
             try {
-                // Parse the public key
-                const publicKey = await openpgp.readKey({ armoredKey: recipientKeyText });
-
                 // Encrypt the message
+                const publicKey = await openpgp.readKey({ armoredKey: contactKey });
                 const encrypted = await openpgp.encrypt({
-                    message: await openpgp.createMessage({ text: message }),
+                    message: await openpgp.createMessage({ text: messageText }),
                     encryptionKeys: publicKey
                 });
 
-                outputEl.value = encrypted;
-                statusEl.innerHTML = '<div class="success">Message encrypted successfully!</div>';
+                // Add to room messages
+                const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`));
+                roomData.messages.push({
+                    timestamp: Date.now(),
+                    encrypted: encrypted,
+                    sender: 'you'
+                });
+
+                localStorage.setItem(`room_${currentRoom}`, JSON.stringify(roomData));
+                document.getElementById('newMessage').value = '';
+                displayMessages(roomData.messages);
 
             } catch (error) {
-                statusEl.innerHTML = `<div class="error">Encryption failed: ${error.message}</div>`;
+                alert(`Encryption failed: ${error.message}`);
             }
         }
 
-        async function decryptMessage() {
-            const ciphertext = document.getElementById('cipherInput').value.trim();
-            const privateKeyText = document.getElementById('privateKey').value.trim();
-            const passphrase = document.getElementById('passphrase').value; // Don't trim - passphrases might have spaces
-            const outputEl = document.getElementById('plaintextOutput');
-            const statusEl = document.getElementById('decryptStatus');
+        function displayMessages(messages) {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = '';
 
-            // Clear previous results
-            outputEl.value = '';
-            statusEl.innerHTML = '';
+            messages.forEach((msg, index) => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message-item';
 
-            if (!ciphertext) {
-                statusEl.innerHTML = '<div class="error">Please enter the ciphertext to decrypt</div>';
-                return;
-            }
+                const time = new Date(msg.timestamp).toLocaleTimeString();
+                messageDiv.innerHTML = `
+                    <div class="message-time">${time} - ${msg.sender}</div>
+                    <div style="font-size: 10px; word-break: break-all; margin-top: 5px;">${msg.encrypted}</div>
+                    <button onclick="decryptMessage(${index})" style="margin-top: 5px; font-size: 11px;">Decrypt</button>
+                    <div id="decrypted_${index}" style="margin-top: 5px; color: #006600; font-weight: bold;"></div>
+                `;
 
-            if (!privateKeyText) {
-                statusEl.innerHTML = '<div class="error">Please enter your private key</div>';
+                messagesDiv.appendChild(messageDiv);
+            });
+
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        async function decryptMessage(messageIndex) {
+            const privateKey = document.getElementById('privateKey').value.trim();
+            const passphrase = document.getElementById('passphrase').value;
+
+            if (!privateKey) {
+                alert('Please enter your private key first');
                 return;
             }
 
             try {
-                // Parse the private key - use provided passphrase or empty string
-                const privateKey = await openpgp.decryptKey({
-                    privateKey: await openpgp.readPrivateKey({ armoredKey: privateKeyText }),
+                const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`));
+                const message = roomData.messages[messageIndex];
+
+                // Decrypt the message
+                const decryptedKey = await openpgp.decryptKey({
+                    privateKey: await openpgp.readPrivateKey({ armoredKey: privateKey }),
                     passphrase: passphrase
                 });
 
-                // Parse the encrypted message
-                const message = await openpgp.readMessage({ armoredMessage: ciphertext });
-
-                // Decrypt the message
+                const encryptedMessage = await openpgp.readMessage({ armoredMessage: message.encrypted });
                 const { data: decrypted } = await openpgp.decrypt({
-                    message,
-                    decryptionKeys: privateKey
+                    message: encryptedMessage,
+                    decryptionKeys: decryptedKey
                 });
 
-                outputEl.value = decrypted;
-                statusEl.innerHTML = '<div class="success">Message decrypted successfully!</div>';
+                document.getElementById(`decrypted_${messageIndex}`).textContent = decrypted;
 
             } catch (error) {
-                statusEl.innerHTML = `<div class="error">Decryption failed: ${error.message}</div>`;
+                document.getElementById(`decrypted_${messageIndex}`).innerHTML = `<span style="color: red;">Decryption failed: ${error.message}</span>`;
             }
         }
+
+        function refreshMessages() {
+            if (currentRoom) {
+                const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`));
+                if (roomData) {
+                    displayMessages(roomData.messages);
+                }
+            }
+        }
+
+        function startRefreshInterval() {
+            refreshInterval = setInterval(refreshMessages, 3000); // Refresh every 3 seconds
+        }
+
+        // Auto-refresh on page focus
+        window.addEventListener('focus', refreshMessages);
     </script>
 </body>
 
