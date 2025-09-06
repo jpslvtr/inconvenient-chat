@@ -72,16 +72,6 @@
             margin: 15px 0;
         }
 
-        .room-code {
-            font-family: monospace;
-            font-size: 18px;
-            font-weight: bold;
-            color: #333;
-            padding: 10px;
-            border: 2px solid #999;
-            background-color: #f9f9f9;
-        }
-
         .instructions {
             background-color: #e6f3ff;
             border: 1px solid #ccc;
@@ -97,25 +87,52 @@
         }
 
         .messages {
-            height: 300px;
+            height: 400px;
             overflow-y: auto;
             border: 1px solid #ccc;
-            padding: 10px;
+            padding: 15px;
             background-color: white;
             margin-bottom: 15px;
-            font-family: monospace;
-            font-size: 12px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
         }
 
         .message-item {
-            margin-bottom: 10px;
-            padding: 8px;
-            border-bottom: 1px solid #eee;
+            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+
+        .message-item.own {
+            background-color: #007bff;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .message-item.other {
+            background-color: #f1f1f1;
+            color: black;
+            margin-right: auto;
+            text-align: left;
         }
 
         .message-time {
-            color: #666;
-            font-size: 10px;
+            font-size: 11px;
+            opacity: 0.7;
+            margin-bottom: 5px;
+        }
+
+        .message-sender {
+            font-weight: bold;
+            margin-bottom: 3px;
+            font-size: 12px;
+        }
+
+        .message-content {
+            font-size: 14px;
+            line-height: 1.4;
         }
 
         .panels {
@@ -145,6 +162,7 @@
             border: 1px solid #999;
             padding: 5px;
             margin-bottom: 10px;
+            resize: vertical;
         }
 
         input[type="text"],
@@ -159,13 +177,11 @@
 
         .message-input {
             height: 80px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
         }
 
         .key-input {
-            height: 100px;
-        }
-
-        .output {
             height: 100px;
         }
 
@@ -185,6 +201,12 @@
 
         button:active {
             border: 2px inset #ddd;
+        }
+
+        button:disabled {
+            background-color: #f5f5f5;
+            color: #999;
+            cursor: not-allowed;
         }
 
         .error {
@@ -219,13 +241,6 @@
             font-size: 12px;
         }
 
-        .passphrase-note {
-            font-size: 11px;
-            color: #666;
-            margin-top: -5px;
-            margin-bottom: 10px;
-        }
-
         .hidden {
             display: none;
         }
@@ -235,6 +250,22 @@
             font-style: italic;
         }
 
+        .setup-complete {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+
+        .typing-indicator {
+            color: #666;
+            font-style: italic;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
         @media (max-width: 768px) {
             .panels {
                 flex-direction: column;
@@ -242,6 +273,10 @@
 
             .room-input {
                 flex-direction: column;
+            }
+
+            .message-item {
+                max-width: 95%;
             }
         }
     </style>
@@ -265,64 +300,78 @@
         <div id="chatInterface" class="hidden">
             <div class="instructions">
                 <strong>Room Code: <span id="currentRoomCode"></span></strong> (share this with your contacts)<br>
-                <strong>Setup:</strong> Join the room as a participant, then add others' public keys<br>
-                <strong>Privacy:</strong> All encryption happens in your browser - messages are sent to all room
-                participants
+                <strong>Setup:</strong> Configure your keys once, then chat seamlessly<br>
+                <strong>Privacy:</strong> All encryption happens in your browser - keys are saved locally for this
+                session
             </div>
 
             <div class="chat-area">
                 <h2>Chat Messages <span id="messageStatus" class="loading"></span></h2>
-                <div id="messages" class="messages"></div>
+                <div id="messages" class="messages">
+                    <div style="color: #666; font-style: italic; text-align: center; margin-top: 50px;">
+                        Complete setup below to start chatting
+                    </div>
+                </div>
+                <div id="typingIndicator" class="typing-indicator hidden">Someone is typing...</div>
                 <div>
-                    <textarea id="newMessage" placeholder="Type your message here..." rows="3"></textarea>
-                    <button onclick="sendMessage()">Send to Room</button>
+                    <textarea id="newMessage" class="message-input" placeholder="Type your message here..." rows="3"
+                        disabled></textarea>
+                    <button id="sendButton" onclick="sendMessage()" disabled>Send Message</button>
                     <button onclick="leaveRoom()">Leave Room</button>
                 </div>
             </div>
 
-            <div class="panels">
-                <div class="panel">
-                    <h2>Room Participants</h2>
+            <div id="setupSection">
+                <div class="panels">
+                    <div class="panel">
+                        <h2>Setup Your Identity</h2>
 
-                    <!-- Add yourself section -->
-                    <div style="border: 1px solid #ccc; padding: 10px; margin-bottom: 15px; background-color: #f9f9f9;">
-                        <strong>Join as participant:</strong>
-                        <input type="text" id="myName" placeholder="Your name in this room" style="margin-top: 5px;">
-                        <textarea id="myPublicKey" class="key-input"
-                            placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;your public key&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
-                        <button onclick="joinAsParticipant()">Join Room as Participant</button>
-                        <div id="myStatus"></div>
-                    </div>
+                        <div id="setupForm">
+                            <label>Your Name:</label>
+                            <input type="text" id="myName" placeholder="Your name in this room">
 
-                    <!-- Add others section -->
-                    <div style="margin-bottom: 10px;">
-                        <strong>Add other participants:</strong>
-                        <input type="text" id="participantName" placeholder="Participant name (e.g., Alice, Bob)"
-                            style="margin-top: 5px;">
-                        <textarea id="newParticipantKey" class="key-input"
-                            placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;participant's public key&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
-                        <button onclick="addParticipant()">Add to Room</button>
-                    </div>
+                            <label>Your Public Key:</label>
+                            <textarea id="myPublicKey" class="key-input"
+                                placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;[your public key data]&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
 
-                    <div
-                        style="border: 1px solid #999; max-height: 150px; overflow-y: auto; padding: 5px; background-color: white;">
-                        <div id="participantsList" style="font-size: 12px;">
-                            <div style="color: #666; font-style: italic;">No participants in this room yet</div>
+                            <label>Your Private Key:</label>
+                            <textarea id="myPrivateKey" class="key-input"
+                                placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----&#10;&#10;[your private key data]&#10;&#10;-----END PGP PRIVATE KEY BLOCK-----"></textarea>
+
+                            <label>Passphrase (if any):</label>
+                            <input type="password" id="myPassphrase"
+                                placeholder="Private key passphrase (leave blank if none)">
+
+                            <button onclick="setupIdentity()">Setup Identity & Join Room</button>
+                            <div id="setupStatus"></div>
+                        </div>
+
+                        <div id="setupComplete" class="setup-complete hidden">
+                            <strong>Setup Complete!</strong> You're chatting as <span id="displayName"></span>
+                            <button onclick="editIdentity()" style="float: right; font-size: 12px;">Edit Keys</button>
                         </div>
                     </div>
 
-                    <div id="participantsStatus"></div>
-                </div>
+                    <div class="panel">
+                        <h2>Room Participants</h2>
 
-                <div class="panel">
-                    <h2>Decrypt Messages</h2>
-                    <label for="privateKey">Your Private Key:</label>
-                    <textarea id="privateKey" class="key-input"
-                        placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----&#10;&#10;your private key&#10;&#10;-----END PGP PRIVATE KEY BLOCK-----"></textarea>
-                    <label for="passphrase">Passphrase (leave blank if no passphrase):</label>
-                    <input type="password" id="passphrase" placeholder="Enter passphrase or leave blank...">
-                    <button onclick="saveDecryptionKey()">Save Decryption Key</button>
-                    <div id="decryptKeyStatus"></div>
+                        <div style="margin-bottom: 15px;">
+                            <label>Add Participant:</label>
+                            <input type="text" id="participantName" placeholder="Participant name (e.g., Alice, Bob)">
+                            <textarea id="newParticipantKey" class="key-input"
+                                placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;[participant's public key data]&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
+                            <button onclick="addParticipant()">Add to Room</button>
+                        </div>
+
+                        <div
+                            style="border: 1px solid #999; max-height: 200px; overflow-y: auto; padding: 8px; background-color: white;">
+                            <div id="participantsList" style="font-size: 12px;">
+                                <div style="color: #666; font-style: italic;">No participants yet</div>
+                            </div>
+                        </div>
+
+                        <div id="participantsStatus"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -337,8 +386,11 @@
         let unsubscribeMessages = null;
         let userId = null;
         let myParticipantName = null;
+        let myPrivateKey = null;
+        let myPassphrase = '';
+        let decryptedPrivateKey = null;
+        let isSetupComplete = false;
 
-        // Generate a unique user ID for this session
         function generateUserId() {
             return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         }
@@ -362,7 +414,6 @@
 
         async function createRoom() {
             await waitForFirestore();
-
             const roomCode = generateRoomCode();
             userId = generateUserId();
 
@@ -384,8 +435,8 @@
 
         async function joinRoom() {
             await waitForFirestore();
-
             const roomCode = document.getElementById('joinRoomCode').value.trim();
+
             if (!roomCode || roomCode.length !== 6) {
                 document.getElementById('roomStatus').innerHTML = '<div class="error">Please enter a valid 6-digit room code</div>';
                 return;
@@ -412,7 +463,6 @@
             document.getElementById('roomSelection').classList.add('hidden');
             document.getElementById('chatInterface').classList.remove('hidden');
             document.getElementById('currentRoomCode').textContent = roomCode;
-
             startMessageListener();
         }
 
@@ -422,9 +472,27 @@
                 unsubscribeMessages = null;
             }
 
+            // Clear all state
             currentRoom = null;
             userId = null;
             myParticipantName = null;
+            myPrivateKey = null;
+            myPassphrase = '';
+            decryptedPrivateKey = null;
+            isSetupComplete = false;
+
+            // Reset UI
+            document.getElementById('setupForm').classList.remove('hidden');
+            document.getElementById('setupComplete').classList.add('hidden');
+            document.getElementById('newMessage').disabled = true;
+            document.getElementById('sendButton').disabled = true;
+
+            // Clear form fields
+            document.getElementById('myName').value = '';
+            document.getElementById('myPublicKey').value = '';
+            document.getElementById('myPrivateKey').value = '';
+            document.getElementById('myPassphrase').value = '';
+            document.getElementById('newMessage').value = '';
 
             document.getElementById('roomSelection').classList.remove('hidden');
             document.getElementById('chatInterface').classList.add('hidden');
@@ -432,63 +500,78 @@
             document.getElementById('roomStatus').innerHTML = '';
         }
 
-        async function joinAsParticipant() {
-            await waitForFirestore();
-
+        async function setupIdentity() {
             const name = document.getElementById('myName').value.trim();
-            const key = document.getElementById('myPublicKey').value.trim();
+            const publicKey = document.getElementById('myPublicKey').value.trim();
+            const privateKey = document.getElementById('myPrivateKey').value.trim();
+            const passphrase = document.getElementById('myPassphrase').value;
 
-            if (!name) {
-                document.getElementById('myStatus').innerHTML = '<div class="error">Please enter your name</div>';
+            if (!name || !publicKey || !privateKey) {
+                document.getElementById('setupStatus').innerHTML = '<div class="error">Please fill in name, public key, and private key</div>';
                 return;
             }
 
-            if (!key) {
-                document.getElementById('myStatus').innerHTML = '<div class="error">Please enter your public key</div>';
-                return;
-            }
-
-            if (!key.includes('BEGIN PGP PUBLIC KEY')) {
-                document.getElementById('myStatus').innerHTML = '<div class="error">Invalid PGP public key format</div>';
+            if (!publicKey.includes('BEGIN PGP PUBLIC KEY') || !privateKey.includes('BEGIN PGP PRIVATE KEY')) {
+                document.getElementById('setupStatus').innerHTML = '<div class="error">Invalid key format - please check your keys</div>';
                 return;
             }
 
             try {
+                // Test private key decryption
+                decryptedPrivateKey = await openpgp.decryptKey({
+                    privateKey: await openpgp.readPrivateKey({ armoredKey: privateKey }),
+                    passphrase: passphrase
+                });
+
                 // Check if name already exists
                 const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
                 const roomData = roomDoc.data();
                 const participants = roomData.participants || {};
 
                 if (participants[name]) {
-                    document.getElementById('myStatus').innerHTML = '<div class="error">Name already exists in this room</div>';
+                    document.getElementById('setupStatus').innerHTML = '<div class="error">Name already exists in this room - choose a different name</div>';
                     return;
                 }
 
+                // Save keys and add to participants
+                myPrivateKey = privateKey;
+                myPassphrase = passphrase;
+                myParticipantName = name;
+                isSetupComplete = true;
+
                 await updateDoc(doc(db, 'rooms', currentRoom), {
-                    [`participants.${name}`]: key
+                    [`participants.${name}`]: publicKey
                 });
 
-                myParticipantName = name;
-                document.getElementById('myStatus').innerHTML = `<div class="success">You joined as "${name}"!</div>`;
+                // Update UI
+                document.getElementById('setupForm').classList.add('hidden');
+                document.getElementById('setupComplete').classList.remove('hidden');
+                document.getElementById('displayName').textContent = name;
+                document.getElementById('newMessage').disabled = false;
+                document.getElementById('sendButton').disabled = false;
+
+                document.getElementById('setupStatus').innerHTML = '<div class="success">Setup complete! You can now send messages.</div>';
 
             } catch (error) {
-                document.getElementById('myStatus').innerHTML = `<div class="error">Failed to join: ${error.message}</div>`;
+                document.getElementById('setupStatus').innerHTML = `<div class="error">Setup failed: ${error.message}. Check your private key and passphrase.</div>`;
             }
+        }
+
+        function editIdentity() {
+            document.getElementById('setupForm').classList.remove('hidden');
+            document.getElementById('setupComplete').classList.add('hidden');
+            document.getElementById('newMessage').disabled = true;
+            document.getElementById('sendButton').disabled = true;
+            isSetupComplete = false;
         }
 
         async function addParticipant() {
             await waitForFirestore();
-
             const name = document.getElementById('participantName').value.trim();
             const key = document.getElementById('newParticipantKey').value.trim();
 
-            if (!name) {
-                document.getElementById('participantsStatus').innerHTML = '<div class="error">Please enter a participant name</div>';
-                return;
-            }
-
-            if (!key) {
-                document.getElementById('participantsStatus').innerHTML = '<div class="error">Please enter the participant\'s public key</div>';
+            if (!name || !key) {
+                document.getElementById('participantsStatus').innerHTML = '<div class="error">Please enter both name and public key</div>';
                 return;
             }
 
@@ -498,13 +581,12 @@
             }
 
             try {
-                // Check if participant already exists
                 const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
                 const roomData = roomDoc.data();
                 const participants = roomData.participants || {};
 
                 if (participants[name]) {
-                    document.getElementById('participantsStatus').innerHTML = '<div class="error">Participant name already exists in this room</div>';
+                    document.getElementById('participantsStatus').innerHTML = '<div class="error">Participant already exists in this room</div>';
                     return;
                 }
 
@@ -514,57 +596,36 @@
 
                 document.getElementById('participantName').value = '';
                 document.getElementById('newParticipantKey').value = '';
-                document.getElementById('participantsStatus').innerHTML = `<div class="success">Participant "${name}" added to room!</div>`;
+                document.getElementById('participantsStatus').innerHTML = `<div class="success">"${name}" added to room!</div>`;
 
             } catch (error) {
                 document.getElementById('participantsStatus').innerHTML = `<div class="error">Failed to add participant: ${error.message}</div>`;
             }
         }
 
-        function saveDecryptionKey() {
-            const privateKey = document.getElementById('privateKey').value.trim();
-            if (!privateKey) {
-                document.getElementById('decryptKeyStatus').innerHTML = '<div class="error">Please enter your private key</div>';
-                return;
-            }
-
-            if (!privateKey.includes('BEGIN PGP PRIVATE KEY')) {
-                document.getElementById('decryptKeyStatus').innerHTML = '<div class="error">Invalid PGP private key format</div>';
-                return;
-            }
-
-            document.getElementById('decryptKeyStatus').innerHTML = '<div class="success">Decryption key ready!</div>';
-        }
-
         async function sendMessage() {
-            await waitForFirestore();
+            if (!isSetupComplete) {
+                alert('Please complete setup first');
+                return;
+            }
 
             const messageText = document.getElementById('newMessage').value.trim();
-
             if (!messageText) {
                 alert('Please enter a message');
                 return;
             }
 
-            if (!myParticipantName) {
-                alert('Please join as a participant first');
-                return;
-            }
-
             try {
-                // Get current room participants
                 const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
                 const roomData = roomDoc.data();
                 const participants = roomData.participants || {};
 
                 if (Object.keys(participants).length === 0) {
-                    alert('No participants in this room yet. Add participants first.');
+                    alert('No participants in this room yet');
                     return;
                 }
 
-                // Encrypt message for all participants
                 const encryptedMessages = [];
-
                 for (const [participantName, participantKey] of Object.entries(participants)) {
                     try {
                         const publicKey = await openpgp.readKey({ armoredKey: participantKey });
@@ -603,6 +664,18 @@
             }
         }
 
+        // Add Enter key support for sending messages
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('newMessage').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!document.getElementById('sendButton').disabled) {
+                        sendMessage();
+                    }
+                }
+            });
+        });
+
         function startMessageListener() {
             const roomRef = doc(db, 'rooms', currentRoom);
 
@@ -611,7 +684,7 @@
                     const data = doc.data();
                     displayMessages(data.messages || []);
                     displayParticipants(data.participants || {});
-                    document.getElementById('messageStatus').textContent = `(${data.messageCount || 0} messages)`;
+                    document.getElementById('messageStatus').textContent = `(${data.messageCount || 0} total messages)`;
                 } else {
                     document.getElementById('messageStatus').textContent = '(Room not found)';
                 }
@@ -625,93 +698,79 @@
             const listDiv = document.getElementById('participantsList');
 
             if (!participants || Object.keys(participants).length === 0) {
-                listDiv.innerHTML = '<div style="color: #666; font-style: italic;">No participants in this room yet</div>';
+                listDiv.innerHTML = '<div style="color: #666; font-style: italic;">No participants yet</div>';
                 return;
             }
 
             listDiv.innerHTML = '';
-
             Object.keys(participants).forEach(name => {
                 const participantDiv = document.createElement('div');
-                participantDiv.style.cssText = 'border-bottom: 1px solid #eee; padding: 5px; margin-bottom: 5px;';
+                participantDiv.style.cssText = 'border-bottom: 1px solid #eee; padding: 8px; margin-bottom: 5px;';
                 const isYou = name === myParticipantName ? ' (you)' : '';
                 participantDiv.innerHTML = `
                     <strong>${name}${isYou}</strong>
-                    <div style="font-size: 10px; color: #666; margin-top: 2px;">Room participant</div>
+                    <div style="font-size: 10px; color: #666; margin-top: 2px;">
+                        ${isYou ? 'Your identity' : 'Room participant'}
+                    </div>
                 `;
                 listDiv.appendChild(participantDiv);
             });
         }
 
-        function displayMessages(messages) {
-            const messagesDiv = document.getElementById('messages');
-            messagesDiv.innerHTML = '';
+        async function decryptMessageContent(encryptedText) {
+            if (!decryptedPrivateKey) return null;
 
-            if (messages.length === 0) {
-                messagesDiv.innerHTML = '<div style="color: #666; font-style: italic;">No messages yet. All messages are encrypted before being stored.</div>';
+            try {
+                const encryptedMessage = await openpgp.readMessage({ armoredMessage: encryptedText });
+                const { data: decrypted } = await openpgp.decrypt({
+                    message: encryptedMessage,
+                    decryptionKeys: decryptedPrivateKey
+                });
+                return decrypted;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        async function displayMessages(messages) {
+            const messagesDiv = document.getElementById('messages');
+
+            if (!isSetupComplete) {
+                messagesDiv.innerHTML = '<div style="color: #666; font-style: italic; text-align: center; margin-top: 50px;">Complete setup below to start chatting</div>';
                 return;
             }
 
-            // Sort messages by timestamp
-            const sortedMessages = messages.sort((a, b) => a.timestamp - b.timestamp);
+            if (messages.length === 0) {
+                messagesDiv.innerHTML = '<div style="color: #666; font-style: italic; text-align: center; margin-top: 50px;">No messages yet. Start the conversation!</div>';
+                return;
+            }
 
-            sortedMessages.forEach((msg, index) => {
+            // Filter and sort messages
+            const myMessages = messages.filter(msg => msg.recipient === myParticipantName);
+            const sortedMessages = myMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+            messagesDiv.innerHTML = '';
+
+            for (const msg of sortedMessages) {
                 const messageDiv = document.createElement('div');
-                messageDiv.className = 'message-item';
+                const isOwnMessage = msg.sender === myParticipantName;
+                messageDiv.className = `message-item ${isOwnMessage ? 'own' : 'other'}`;
 
                 const time = new Date(msg.timestamp).toLocaleTimeString();
-                const senderLabel = msg.sender === myParticipantName ? 'you' : msg.sender;
-                const recipientInfo = msg.recipient ? ` → ${msg.recipient}` : '';
+                const decryptedContent = await decryptMessageContent(msg.encrypted);
 
                 messageDiv.innerHTML = `
-                    <div class="message-time">${time} - ${senderLabel}${recipientInfo}</div>
-                    <div style="font-size: 10px; word-break: break-all; margin-top: 5px;">${msg.encrypted.substring(0, 100)}...</div>
-                    <button onclick="decryptMessage('${msg.id}')" style="margin-top: 5px; font-size: 11px;">Decrypt</button>
-                    <div id="decrypted_${msg.id}" style="margin-top: 5px; color: #006600; font-weight: bold;"></div>
+                    <div class="message-time">${time}</div>
+                    ${!isOwnMessage ? `<div class="message-sender">${msg.sender}</div>` : ''}
+                    <div class="message-content">
+                        ${decryptedContent || '<em>Failed to decrypt</em>'}
+                    </div>
                 `;
 
                 messagesDiv.appendChild(messageDiv);
-            });
+            }
 
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
-
-        async function decryptMessage(messageId) {
-            const privateKey = document.getElementById('privateKey').value.trim();
-            const passphrase = document.getElementById('passphrase').value;
-
-            if (!privateKey) {
-                alert('Please enter your private key first');
-                return;
-            }
-
-            try {
-                const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
-                const data = roomDoc.data();
-                const message = data.messages.find(msg => msg.id === messageId);
-
-                if (!message) {
-                    document.getElementById(`decrypted_${messageId}`).innerHTML = '<span style="color: red;">Message not found</span>';
-                    return;
-                }
-
-                // Decrypt the message
-                const decryptedKey = await openpgp.decryptKey({
-                    privateKey: await openpgp.readPrivateKey({ armoredKey: privateKey }),
-                    passphrase: passphrase
-                });
-
-                const encryptedMessage = await openpgp.readMessage({ armoredMessage: message.encrypted });
-                const { data: decrypted } = await openpgp.decrypt({
-                    message: encryptedMessage,
-                    decryptionKeys: decryptedKey
-                });
-
-                document.getElementById(`decrypted_${messageId}`).textContent = decrypted;
-
-            } catch (error) {
-                document.getElementById(`decrypted_${messageId}`).innerHTML = `<span style="color: red;">Decryption failed: ${error.message}</span>`;
-            }
         }
     </script>
 </body>
