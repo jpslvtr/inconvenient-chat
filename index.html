@@ -266,7 +266,7 @@
         <div id="chatInterface" class="hidden">
             <div class="instructions">
                 <strong>Room Code: <span id="currentRoomCode"></span></strong> (share this with your contacts)<br>
-                <strong>Setup:</strong> Add participants' public keys to this room, then start group chatting<br>
+                <strong>Setup:</strong> Join the room as a participant, then add others' public keys<br>
                 <strong>Privacy:</strong> All encryption happens in your browser - messages are sent to all room
                 participants
             </div>
@@ -283,20 +283,25 @@
 
             <div class="panels">
                 <div class="panel">
-                    <h2>Your Public Key</h2>
-                    <textarea id="myPublicKey" class="key-input"
-                        placeholder="Paste your public key here so others can encrypt messages to you"></textarea>
-                    <button onclick="saveMyPublicKey()">Save My Public Key</button>
-                    <div id="myKeyStatus"></div>
-                </div>
-
-                <div class="panel">
                     <h2>Room Participants</h2>
+
+                    <!-- Add yourself section -->
+                    <div style="border: 1px solid #ccc; padding: 10px; margin-bottom: 15px; background-color: #f9f9f9;">
+                        <strong>Join as participant:</strong>
+                        <input type="text" id="myName" placeholder="Your name in this room" style="margin-top: 5px;">
+                        <textarea id="myPublicKey" class="key-input"
+                            placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;[your public key data]&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
+                        <button onclick="joinAsParticipant()">Join Room as Participant</button>
+                        <div id="myStatus"></div>
+                    </div>
+
+                    <!-- Add others section -->
                     <div style="margin-bottom: 10px;">
+                        <strong>Add other participants:</strong>
                         <input type="text" id="participantName" placeholder="Participant name (e.g., Alice, Bob)"
-                            style="margin-bottom: 5px;">
+                            style="margin-top: 5px;">
                         <textarea id="newParticipantKey" class="key-input"
-                            placeholder="Paste participant's public key here"></textarea>
+                            placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;[participant's public key data]&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
                         <button onclick="addParticipant()">Add to Room</button>
                     </div>
 
@@ -309,14 +314,12 @@
 
                     <div id="participantsStatus"></div>
                 </div>
-            </div>
 
-            <div class="panels">
                 <div class="panel">
                     <h2>Decrypt Messages</h2>
                     <label for="privateKey">Your Private Key:</label>
                     <textarea id="privateKey" class="key-input"
-                        placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----"></textarea>
+                        placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----&#10;&#10;[your private key data]&#10;&#10;-----END PGP PRIVATE KEY BLOCK-----"></textarea>
                     <label for="passphrase">Passphrase (leave blank if no passphrase):</label>
                     <input type="password" id="passphrase" placeholder="Enter passphrase or leave blank...">
                     <button onclick="saveDecryptionKey()">Save Decryption Key</button>
@@ -334,6 +337,7 @@
         let currentRoom = null;
         let unsubscribeMessages = null;
         let userId = null;
+        let myParticipantName = null;
 
         // Generate a unique user ID for this session
         function generateUserId() {
@@ -368,8 +372,7 @@
                     created: Date.now(),
                     messageCount: 0,
                     messages: [],
-                    participants: {},
-                    publicKeys: {}
+                    participants: {}
                 });
 
                 enterRoom(roomCode);
@@ -422,6 +425,7 @@
 
             currentRoom = null;
             userId = null;
+            myParticipantName = null;
 
             document.getElementById('roomSelection').classList.remove('hidden');
             document.getElementById('chatInterface').classList.add('hidden');
@@ -429,27 +433,47 @@
             document.getElementById('roomStatus').innerHTML = '';
         }
 
-        async function saveMyPublicKey() {
+        async function joinAsParticipant() {
             await waitForFirestore();
 
+            const name = document.getElementById('myName').value.trim();
             const key = document.getElementById('myPublicKey').value.trim();
+
+            if (!name) {
+                document.getElementById('myStatus').innerHTML = '<div class="error">Please enter your name</div>';
+                return;
+            }
+
             if (!key) {
-                document.getElementById('myKeyStatus').innerHTML = '<div class="error">Please enter your public key</div>';
+                document.getElementById('myStatus').innerHTML = '<div class="error">Please enter your public key</div>';
                 return;
             }
 
             if (!key.includes('BEGIN PGP PUBLIC KEY')) {
-                document.getElementById('myKeyStatus').innerHTML = '<div class="error">Invalid PGP public key format</div>';
+                document.getElementById('myStatus').innerHTML = '<div class="error">Invalid PGP public key format</div>';
                 return;
             }
 
             try {
+                // Check if name already exists
+                const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
+                const roomData = roomDoc.data();
+                const participants = roomData.participants || {};
+
+                if (participants[name]) {
+                    document.getElementById('myStatus').innerHTML = '<div class="error">Name already exists in this room</div>';
+                    return;
+                }
+
                 await updateDoc(doc(db, 'rooms', currentRoom), {
-                    [`publicKeys.${userId}`]: key
+                    [`participants.${name}`]: key
                 });
-                document.getElementById('myKeyStatus').innerHTML = '<div class="success">Your public key saved!</div>';
+
+                myParticipantName = name;
+                document.getElementById('myStatus').innerHTML = `<div class="success">You joined as "${name}"!</div>`;
+
             } catch (error) {
-                document.getElementById('myKeyStatus').innerHTML = `<div class="error">Failed to save key: ${error.message}</div>`;
+                document.getElementById('myStatus').innerHTML = `<div class="error">Failed to join: ${error.message}</div>`;
             }
         }
 
@@ -515,11 +539,16 @@
 
         async function sendMessage() {
             await waitForFirestore();
-            
+
             const messageText = document.getElementById('newMessage').value.trim();
-            
+
             if (!messageText) {
                 alert('Please enter a message');
+                return;
+            }
+
+            if (!myParticipantName) {
+                alert('Please join as a participant first');
                 return;
             }
 
@@ -528,7 +557,7 @@
                 const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
                 const roomData = roomDoc.data();
                 const participants = roomData.participants || {};
-                
+
                 if (Object.keys(participants).length === 0) {
                     alert('No participants in this room yet. Add participants first.');
                     return;
@@ -536,7 +565,7 @@
 
                 // Encrypt message for all participants
                 const encryptedMessages = [];
-                
+
                 for (const [participantName, participantKey] of Object.entries(participants)) {
                     try {
                         const publicKey = await openpgp.readKey({ armoredKey: participantKey });
@@ -544,16 +573,16 @@
                             message: await openpgp.createMessage({ text: messageText }),
                             encryptionKeys: publicKey
                         });
-                        
+
                         encryptedMessages.push({
                             id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                             timestamp: Date.now(),
                             encrypted: encrypted,
-                            sender: userId,
+                            sender: myParticipantName,
                             recipient: participantName
                         });
                     } catch (error) {
-                        console.error(`Failed to encrypt for ${ participantName }: `, error);
+                        console.error(`Failed to encrypt for ${participantName}:`, error);
                     }
                 }
 
@@ -567,11 +596,11 @@
                     messageCount: increment(encryptedMessages.length),
                     lastActivity: Date.now()
                 });
-                
+
                 document.getElementById('newMessage').value = '';
-                
+
             } catch (error) {
-                alert(`Failed to send message: ${ error.message } `);
+                alert(`Failed to send message: ${error.message}`);
             }
         }
 
@@ -583,7 +612,7 @@
                     const data = doc.data();
                     displayMessages(data.messages || []);
                     displayParticipants(data.participants || {});
-                    document.getElementById('messageStatus').textContent = `(${ data.messageCount || 0 } messages)`;
+                    document.getElementById('messageStatus').textContent = `(${data.messageCount || 0} messages)`;
                 } else {
                     document.getElementById('messageStatus').textContent = '(Room not found)';
                 }
@@ -595,20 +624,21 @@
 
         function displayParticipants(participants) {
             const listDiv = document.getElementById('participantsList');
-            
+
             if (!participants || Object.keys(participants).length === 0) {
                 listDiv.innerHTML = '<div style="color: #666; font-style: italic;">No participants in this room yet</div>';
                 return;
             }
-            
+
             listDiv.innerHTML = '';
-            
+
             Object.keys(participants).forEach(name => {
                 const participantDiv = document.createElement('div');
                 participantDiv.style.cssText = 'border-bottom: 1px solid #eee; padding: 5px; margin-bottom: 5px;';
+                const isYou = name === myParticipantName ? ' (you)' : '';
                 participantDiv.innerHTML = `
-                    < strong > ${ name }</strong >
-                        <div style="font-size: 10px; color: #666; margin-top: 2px;">Room participant</div>
+                    <strong>${name}${isYou}</strong>
+                    <div style="font-size: 10px; color: #666; margin-top: 2px;">Room participant</div>
                 `;
                 listDiv.appendChild(participantDiv);
             });
@@ -631,11 +661,11 @@
                 messageDiv.className = 'message-item';
 
                 const time = new Date(msg.timestamp).toLocaleTimeString();
-                const senderLabel = msg.sender === userId ? 'you' : 'contact';
-                const recipientInfo = msg.recipient ? ` → ${ msg.recipient } ` : '';
+                const senderLabel = msg.sender === myParticipantName ? 'you' : msg.sender;
+                const recipientInfo = msg.recipient ? ` → ${msg.recipient}` : '';
 
                 messageDiv.innerHTML = `
-                    < div class="message-time" > ${ time } - ${ senderLabel }${ recipientInfo }</div >
+                    <div class="message-time">${time} - ${senderLabel}${recipientInfo}</div>
                     <div style="font-size: 10px; word-break: break-all; margin-top: 5px;">${msg.encrypted.substring(0, 100)}...</div>
                     <button onclick="decryptMessage('${msg.id}')" style="margin-top: 5px; font-size: 11px;">Decrypt</button>
                     <div id="decrypted_${msg.id}" style="margin-top: 5px; color: #006600; font-weight: bold;"></div>
@@ -662,7 +692,7 @@
                 const message = data.messages.find(msg => msg.id === messageId);
 
                 if (!message) {
-                    document.getElementById(`decrypted_${ messageId } `).innerHTML = '<span style="color: red;">Message not found</span>';
+                    document.getElementById(`decrypted_${messageId}`).innerHTML = '<span style="color: red;">Message not found</span>';
                     return;
                 }
 
@@ -678,10 +708,10 @@
                     decryptionKeys: decryptedKey
                 });
 
-                document.getElementById(`decrypted_${ messageId } `).textContent = decrypted;
+                document.getElementById(`decrypted_${messageId}`).textContent = decrypted;
 
             } catch (error) {
-                document.getElementById(`decrypted_${ messageId } `).innerHTML = ` < span style = "color: red;" > Decryption failed: ${ error.message }</span >`;
+                document.getElementById(`decrypted_${messageId}`).innerHTML = `<span style="color: red;">Decryption failed: ${error.message}</span>`;
             }
         }
     </script>
