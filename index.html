@@ -339,11 +339,11 @@
 
                             <label>Your Public Key:</label>
                             <textarea id="myPublicKey" class="key-input"
-                                placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;your public key&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
+                                placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;[your public key data]&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
 
                             <label>Your Private Key:</label>
                             <textarea id="myPrivateKey" class="key-input"
-                                placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----&#10;&#10;your private key&#10;&#10;-----END PGP PRIVATE KEY BLOCK-----"></textarea>
+                                placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----&#10;&#10;[your private key data]&#10;&#10;-----END PGP PRIVATE KEY BLOCK-----"></textarea>
 
                             <label>Passphrase (if any):</label>
                             <input type="password" id="myPassphrase"
@@ -354,7 +354,8 @@
                         </div>
 
                         <div id="setupComplete" class="setup-complete hidden">
-                            <span><strong>Setup Complete!</strong> You're chatting as <span id="displayName"></span></span>
+                            <span><strong>Setup Complete!</strong> You're chatting as <span
+                                    id="displayName"></span></span>
                             <button onclick="editIdentity()">Edit Keys</button>
                         </div>
                     </div>
@@ -366,7 +367,7 @@
                             <label>Add Participant:</label>
                             <input type="text" id="participantName" placeholder="Participant name (e.g., Alice, Bob)">
                             <textarea id="newParticipantKey" class="key-input"
-                                placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;participant's public key&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
+                                placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;[participant's public key data]&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
                             <button onclick="addParticipant()">Add to Room</button>
                         </div>
 
@@ -431,37 +432,64 @@
             localStorage.setItem(`identity_${currentRoom}`, JSON.stringify(identityData));
         }
 
-        async function checkIfKnownParticipant() {
-                if (!currentRoom || isSetupComplete) return;
+        async function loadIdentityFromStorage() {
+            if (!currentRoom) return false;
 
-                try {
-                    const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
-                    const roomData = roomDoc.data();
-                    const participants = roomData.participants || {};
+            const stored = localStorage.getItem(`identity_${currentRoom}`);
+            if (!stored) return false;
 
-                    // Only proceed if there are participants and setup is not complete
-                    const participantNames = Object.keys(participants);
+            try {
+                const identityData = JSON.parse(stored);
 
-                    if (participantNames.length === 1) {
-                        const [name] = participantNames;
-                        const publicKey = participants[name];
-
-                        // Pre-populate the form only if it's currently empty
-                        if (!document.getElementById('myName').value) {
-                            document.getElementById('myName').value = name;
-                        }
-                        if (!document.getElementById('myPublicKey').value) {
-                            document.getElementById('myPublicKey').value = publicKey;
-                        }
-
-                        // Show a helpful message
-                        document.getElementById('setupStatus').innerHTML = `<div style="background-color: #e6f3ff; border: 1px solid #ccc; padding: 10px; color: #666;">Found your details! "${name}" - just add your private key below.</div>`;
-                    }
-
-                } catch (error) {
-                    console.error('Error checking participants:', error);
+                // Validate that we have all required data
+                if (!identityData.name || !identityData.privateKey) {
+                    localStorage.removeItem(`identity_${currentRoom}`);
+                    return false;
                 }
+
+                // Check if this person still exists as a participant in the room
+                const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
+                const roomData = roomDoc.data();
+                const participants = roomData.participants || {};
+
+                if (!participants[identityData.name]) {
+                    // Person no longer exists in room, clear storage
+                    localStorage.removeItem(`identity_${currentRoom}`);
+                    return false;
+                }
+
+                // Restore identity
+                myParticipantName = identityData.name;
+                myPrivateKey = identityData.privateKey;
+                myPassphrase = identityData.passphrase || '';
+
+                // Test that private key still works
+                const parsedPrivateKey = await openpgp.readPrivateKey({ armoredKey: myPrivateKey });
+                if (parsedPrivateKey.isDecrypted()) {
+                    decryptedPrivateKey = parsedPrivateKey;
+                } else {
+                    decryptedPrivateKey = await openpgp.decryptKey({
+                        privateKey: parsedPrivateKey,
+                        passphrase: myPassphrase
+                    });
+                }
+
+                isSetupComplete = true;
+
+                // Update UI
+                document.getElementById('setupForm').classList.add('hidden');
+                document.getElementById('setupComplete').classList.remove('hidden');
+                document.getElementById('displayName').textContent = myParticipantName;
+                document.getElementById('newMessage').disabled = false;
+                document.getElementById('sendButton').disabled = false;
+
+                return true;
+            } catch (error) {
+                console.error('Failed to load identity:', error);
+                localStorage.removeItem(`identity_${currentRoom}`);
+                return false;
             }
+        }
 
         async function createRoom() {
             await waitForFirestore();
@@ -510,21 +538,16 @@
         }
 
         async function enterRoom(roomCode) {
-                currentRoom = roomCode;
-                document.getElementById('roomSelection').classList.add('hidden');
-                document.getElementById('chatInterface').classList.remove('hidden');
-                document.getElementById('currentRoomCode').textContent = roomCode;
+            currentRoom = roomCode;
+            document.getElementById('roomSelection').classList.add('hidden');
+            document.getElementById('chatInterface').classList.remove('hidden');
+            document.getElementById('currentRoomCode').textContent = roomCode;
 
-                startMessageListener();
+            startMessageListener();
 
-                // Try to load saved identity first
-                const identityLoaded = await loadIdentityFromStorage();
-
-                // If no saved identity, check if they're a known participant
-                if (!identityLoaded) {
-                    await checkIfKnownParticipant();
-                }
-            }
+            // Try to load saved identity - only show setup complete if this succeeds
+            await loadIdentityFromStorage();
+        }
 
         async function leaveRoom() {
             if (unsubscribeMessages) {
@@ -546,7 +569,7 @@
             decryptedPrivateKey = null;
             isSetupComplete = false;
 
-            // Reset UI
+            // Reset UI to default state
             document.getElementById('setupForm').classList.remove('hidden');
             document.getElementById('setupComplete').classList.add('hidden');
             document.getElementById('newMessage').disabled = true;
@@ -558,6 +581,7 @@
             document.getElementById('myPrivateKey').value = '';
             document.getElementById('myPassphrase').value = '';
             document.getElementById('newMessage').value = '';
+            document.getElementById('setupStatus').innerHTML = '';
 
             document.getElementById('roomSelection').classList.remove('hidden');
             document.getElementById('chatInterface').classList.add('hidden');
@@ -850,34 +874,6 @@
 
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
-
-        async function checkIfKnownParticipant() {
-                if (!currentRoom) return;
-
-                try {
-                    const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
-                    const roomData = roomDoc.data();
-                    const participants = roomData.participants || {};
-
-                    // Check if there's only one participant (likely them)
-                    const participantNames = Object.keys(participants);
-
-                    if (participantNames.length === 1) {
-                        const [name] = participantNames;
-                        const publicKey = participants[name];
-
-                        // Pre-populate the form
-                        document.getElementById('myName').value = name;
-                        document.getElementById('myPublicKey').value = publicKey;
-
-                        // Show a helpful message
-                        document.getElementById('setupStatus').innerHTML = `<div style="background-color: #e6f3ff; border: 1px solid #ccc; padding: 10px; color: #666;">Found your details! "${name}" - just add your private key below.</div>`;
-                    }
-
-                } catch (error) {
-                    console.error('Error checking participants:', error);
-                }
-            }
     </script>
 </body>
 
