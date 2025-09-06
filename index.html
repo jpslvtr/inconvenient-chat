@@ -403,6 +403,7 @@
         let myPassphrase = '';
         let decryptedPrivateKey = null;
         let isSetupComplete = false;
+        let currentRoomData = null; // Store current room data
 
         function generateUserId() {
             return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -491,11 +492,33 @@
                 // Clear the setup status message
                 document.getElementById('setupStatus').innerHTML = '';
 
+                // Force refresh messages and participants display if we have room data
+                if (currentRoomData) {
+                    displayMessages(currentRoomData.messages || []);
+                    displayParticipants(currentRoomData.participants || {});
+                    updateMessageCount(currentRoomData.messages || []);
+                }
+
                 return true;
             } catch (error) {
                 console.error('Failed to load identity:', error);
                 localStorage.removeItem(`identity_${currentRoom}`);
                 return false;
+            }
+        }
+
+        function updateMessageCount(messages) {
+            if (isSetupComplete && myParticipantName) {
+                // Count unique messages by grouping by timestamp and sender
+                const uniqueMessages = new Map();
+                messages.filter(msg => msg.recipient === myParticipantName).forEach(msg => {
+                    const key = `${msg.timestamp}_${msg.sender}`;
+                    uniqueMessages.set(key, msg);
+                });
+                document.getElementById('messageStatus').textContent = `(${uniqueMessages.size} messages)`;
+            } else {
+                // Fallback to total count if not set up
+                document.getElementById('messageStatus').textContent = `(${messages.length} total messages)`;
             }
         }
 
@@ -570,6 +593,7 @@
 
             // Clear all state
             currentRoom = null;
+            currentRoomData = null;
             userId = null;
             myParticipantName = null;
             myPrivateKey = null;
@@ -792,16 +816,10 @@
             unsubscribeMessages = onSnapshot(roomRef, (doc) => {
                 if (doc.exists()) {
                     const data = doc.data();
+                    currentRoomData = data; // Store the room data
                     displayMessages(data.messages || []);
                     displayParticipants(data.participants || {});
-
-                    // Count only messages visible to the current user
-                    if (isSetupComplete && myParticipantName) {
-                        const myMessages = (data.messages || []).filter(msg => msg.recipient === myParticipantName);
-                        document.getElementById('messageStatus').textContent = `(${myMessages.length} messages)`;
-                    } else {
-                        document.getElementById('messageStatus').textContent = `(${data.messageCount || 0} total messages)`;
-                    }
+                    updateMessageCount(data.messages || []);
                 } else {
                     document.getElementById('messageStatus').textContent = '(Room not found)';
                 }
@@ -825,11 +843,11 @@
                 participantDiv.style.cssText = 'border-bottom: 1px solid #eee; padding: 8px; margin-bottom: 5px;';
                 const isYou = name === myParticipantName ? ' (you)' : '';
                 participantDiv.innerHTML = `
-                   <strong>${name}${isYou}</strong>
-                   <div style="font-size: 10px; color: #666; margin-top: 2px;">
-                       ${isYou ? 'Your identity' : 'Room participant'}
-                   </div>
-               `;
+                    <strong>${name}${isYou}</strong>
+                    <div style="font-size: 10px; color: #666; margin-top: 2px;">
+                        ${isYou ? 'Your identity' : 'Room participant'}
+                    </div>
+                `;
                 listDiv.appendChild(participantDiv);
             });
         }
@@ -862,21 +880,28 @@
                 return;
             }
 
-            // Filter and sort messages
+            // Filter messages for current user and group by timestamp+sender to get unique messages
             const myMessages = messages.filter(msg => msg.recipient === myParticipantName);
-            const sortedMessages = myMessages.sort((a, b) => a.timestamp - b.timestamp);
+            const uniqueMessages = new Map();
 
-            messagesDiv.innerHTML = '';
+            myMessages.forEach(msg => {
+                        const key = `${msg.timestamp}_${msg.sender}`;
+                        uniqueMessages.set(key, msg);
+                    });
 
-            for (const msg of sortedMessages) {
-                const messageDiv = document.createElement('div');
-                const isOwnMessage = msg.sender === myParticipantName;
-                messageDiv.className = `message-item ${isOwnMessage ? 'own' : 'other'}`;
+                    const sortedMessages = Array.from(uniqueMessages.values()).sort((a, b) => a.timestamp - b.timestamp);
 
-                const time = new Date(msg.timestamp).toLocaleTimeString();
-                const decryptedContent = await decryptMessageContent(msg.encrypted);
+                    messagesDiv.innerHTML = '';
 
-                messageDiv.innerHTML = `
+                    for (const msg of sortedMessages) {
+                        const messageDiv = document.createElement('div');
+                        const isOwnMessage = msg.sender === myParticipantName;
+                        messageDiv.className = `message-item ${isOwnMessage ? 'own' : 'other'}`;
+
+                        const time = new Date(msg.timestamp).toLocaleTimeString();
+                        const decryptedContent = await decryptMessageContent(msg.encrypted);
+
+                        messageDiv.innerHTML = `
                    <div class="message-time">${time}</div>
                    <div class="message-sender">${isOwnMessage ? 'You' : msg.sender}</div>
                    <div class="message-content">
@@ -884,12 +909,12 @@
                    </div>
                `;
 
-                messagesDiv.appendChild(messageDiv);
-            }
+                        messagesDiv.appendChild(messageDiv);
+                    }
 
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
-    </script>
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                }
+         </script>
 </body>
 
 </html>
