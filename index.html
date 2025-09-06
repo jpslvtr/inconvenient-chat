@@ -12,6 +12,7 @@
             margin: 20px;
             background-color: #f0f0f0;
         }
+
         .container {
             max-width: 1000px;
             margin: 0 auto;
@@ -19,33 +20,39 @@
             padding: 20px;
             border: 2px solid #666;
         }
+
         h1 {
             text-align: center;
             color: #333;
             margin-bottom: 10px;
         }
+
         .instructions {
             background-color: #ffffcc;
             border: 1px solid #ccc;
             padding: 15px;
             margin-bottom: 20px;
         }
+
         .panels {
             display: flex;
             gap: 20px;
         }
+
         .panel {
             flex: 1;
             border: 2px solid #999;
             padding: 15px;
             background-color: #fafafa;
         }
+
         .panel h2 {
             margin-top: 0;
             color: #444;
             border-bottom: 1px solid #ccc;
             padding-bottom: 5px;
         }
+
         textarea {
             width: 100%;
             box-sizing: border-box;
@@ -55,15 +62,28 @@
             padding: 5px;
             margin-bottom: 10px;
         }
+
+        input[type="password"] {
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 12px;
+            border: 1px solid #999;
+            padding: 5px;
+            margin-bottom: 10px;
+        }
+
         .message-input {
             height: 80px;
         }
+
         .key-input {
             height: 120px;
         }
+
         .output {
             height: 150px;
         }
+
         button {
             background-color: #ddd;
             border: 2px outset #ddd;
@@ -72,12 +92,15 @@
             cursor: pointer;
             margin-bottom: 10px;
         }
+
         button:hover {
             background-color: #ccc;
         }
+
         button:active {
             border: 2px inset #ddd;
         }
+
         .error {
             color: red;
             background-color: #ffe6e6;
@@ -85,6 +108,7 @@
             padding: 10px;
             margin-top: 10px;
         }
+
         .success {
             color: green;
             background-color: #e6ffe6;
@@ -92,12 +116,14 @@
             padding: 10px;
             margin-top: 10px;
         }
+
         label {
             font-weight: bold;
             display: block;
             margin-top: 10px;
             margin-bottom: 5px;
         }
+
         .footer {
             text-align: center;
             margin-top: 30px;
@@ -106,6 +132,14 @@
             color: #666;
             font-size: 12px;
         }
+
+        .passphrase-note {
+            font-size: 11px;
+            color: #666;
+            margin-top: -5px;
+            margin-bottom: 10px;
+        }
+
         @media (max-width: 768px) {
             .panels {
                 flex-direction: column;
@@ -121,7 +155,8 @@
         <div class="instructions">
             <strong>Instructions:</strong><br>
             • Your keys never leave this page - all encryption and decryption happen in your browser<br>
-            • Feel free to inspect the code (right click → <i>inspect</i> in most browsers). All code is in index.html<br>
+            • Feel free to inspect the code (right click → <i>inspect</i> in most browsers). All code is in
+            index.html<br>
             • <strong>Encrypt:</strong> Paste recipient's public key + message → get ciphertext<br>
             • <strong>Decrypt:</strong> Paste your private key + ciphertext → get message
         </div>
@@ -154,6 +189,11 @@
                 <label for="privateKey">Your Private Key:</label>
                 <textarea id="privateKey" class="key-input"
                     placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----"></textarea>
+
+                <label for="passphrase">Passphrase (leave blank if no passphrase):</label>
+                <div class="passphrase-note">Enter the passphrase that protects your private key, or leave empty if your
+                    key has no passphrase</div>
+                <input type="password" id="passphrase" placeholder="Enter passphrase or leave blank...">
 
                 <button onclick="decryptMessage()">Decrypt</button>
 
@@ -211,6 +251,7 @@
         async function decryptMessage() {
             const ciphertext = document.getElementById('cipherInput').value.trim();
             const privateKeyText = document.getElementById('privateKey').value.trim();
+            const passphrase = document.getElementById('passphrase').value; // Don't trim - passphrases might have spaces
             const outputEl = document.getElementById('plaintextOutput');
             const statusEl = document.getElementById('decryptStatus');
 
@@ -229,10 +270,10 @@
             }
 
             try {
-                // Parse the private key
+                // Parse the private key - use provided passphrase or empty string
                 const privateKey = await openpgp.decryptKey({
                     privateKey: await openpgp.readPrivateKey({ armoredKey: privateKeyText }),
-                    passphrase: ''
+                    passphrase: passphrase
                 });
 
                 // Parse the encrypted message
