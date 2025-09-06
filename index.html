@@ -257,6 +257,21 @@
             padding: 10px;
             margin-bottom: 15px;
             border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .setup-complete button {
+            margin: 0;
+            padding: 4px 8px;
+            font-size: 11px;
+            background-color: #c3e6cb;
+            border: 1px solid #b0d4b8;
+        }
+
+        .setup-complete button:hover {
+            background-color: #b0d4b8;
         }
 
         @media (max-width: 768px) {
@@ -339,8 +354,8 @@
                         </div>
 
                         <div id="setupComplete" class="setup-complete hidden">
-                            <strong>Setup Complete!</strong> You're chatting as <span id="displayName"></span>
-                            <button onclick="editIdentity()" style="float: right; font-size: 12px;">Edit Keys</button>
+                            <span><strong>Setup Complete!</strong> You're chatting as <span id="displayName"></span></span>
+                            <button onclick="editIdentity()">Edit Keys</button>
                         </div>
                     </div>
 
