@@ -6,6 +6,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>inconvenient-chat</title>
     <script src="https://unpkg.com/openpgp@5.11.0/dist/openpgp.min.js"></script>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, arrayUnion, increment } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBvyMBJx1ARbgS41wco-GqZX6tbMb6OAGs",
+            authDomain: "inconvenient-chat.firebaseapp.com",
+            projectId: "inconvenient-chat",
+            storageBucket: "inconvenient-chat.firebasestorage.app",
+            messagingSenderId: "1028515558620",
+            appId: "1:1028515558620:web:6c6f3ff593fb8bf3a7b019",
+            measurementId: "G-LV0QKQL6Q2"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        window.db = getFirestore(app);
+        window.firestoreLoaded = true;
+
+        // Make Firestore functions globally available
+        window.doc = doc;
+        window.setDoc = setDoc;
+        window.getDoc = getDoc;
+        window.updateDoc = updateDoc;
+        window.onSnapshot = onSnapshot;
+        window.arrayUnion = arrayUnion;
+        window.increment = increment;
+    </script>
+
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -201,6 +231,11 @@
             display: none;
         }
 
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+
         @media (max-width: 768px) {
             .panels {
                 flex-direction: column;
@@ -236,12 +271,12 @@
             </div>
 
             <div class="chat-area">
-                <h2>Chat Messages</h2>
+                <h2>Chat Messages <span id="messageStatus" class="loading"></span></h2>
                 <div id="messages" class="messages"></div>
                 <div>
                     <textarea id="newMessage" placeholder="Type your message here..." rows="3"></textarea>
                     <button onclick="sendMessage()">Send Encrypted Message</button>
-                    <button onclick="refreshMessages()">Refresh</button>
+                    <button onclick="clearRoomMessages()">Clear Messages</button>
                     <button onclick="leaveRoom()">Leave Room</button>
                 </div>
             </div>
@@ -285,40 +320,97 @@
 
     <script>
         let currentRoom = null;
-        let refreshInterval = null;
+        let unsubscribeRoom = null;
+        let roomMessages = [];
+
+        function waitForFirestore() {
+            return new Promise((resolve) => {
+                const checkFirestore = () => {
+                    if (window.firestoreLoaded && window.db) {
+                        resolve();
+                    } else {
+                        setTimeout(checkFirestore, 100);
+                    }
+                };
+                checkFirestore();
+            });
+        }
 
         function generateRoomCode() {
             return Math.floor(100000 + Math.random() * 900000).toString();
         }
 
-        function createRoom() {
-            const roomCode = generateRoomCode();
-            localStorage.setItem(`room_${roomCode}`, JSON.stringify({
-                created: Date.now(),
-                messages: [],
-                myPublicKey: '',
-                contactPublicKey: ''
-            }));
+        // Load messages from localStorage
+        function loadMessagesFromStorage() {
+            if (!currentRoom) return;
 
-            enterRoom(roomCode);
-            document.getElementById('roomStatus').innerHTML = '<div class="success">Room created successfully!</div>';
+            const stored = localStorage.getItem(`messages_${currentRoom}`);
+            if (stored) {
+                try {
+                    roomMessages = JSON.parse(stored);
+                } catch (error) {
+                    console.error('Error loading stored messages:', error);
+                    roomMessages = [];
+                }
+            } else {
+                roomMessages = [];
+            }
         }
 
-        function joinRoom() {
+        // Save messages to localStorage
+        function saveMessagesToStorage() {
+            if (!currentRoom) return;
+
+            try {
+                localStorage.setItem(`messages_${currentRoom}`, JSON.stringify(roomMessages));
+            } catch (error) {
+                console.error('Error saving messages:', error);
+            }
+        }
+
+        async function createRoom() {
+            await waitForFirestore();
+
+            const roomCode = generateRoomCode();
+
+            try {
+                await setDoc(doc(db, 'rooms', roomCode), {
+                    created: Date.now(),
+                    messageCount: 0,
+                    activeUsers: 0,
+                    publicKeys: {}
+                });
+
+                enterRoom(roomCode);
+                document.getElementById('roomStatus').innerHTML = '<div class="success">Room created successfully!</div>';
+
+            } catch (error) {
+                document.getElementById('roomStatus').innerHTML = `<div class="error">Failed to create room: ${error.message}</div>`;
+            }
+        }
+
+        async function joinRoom() {
+            await waitForFirestore();
+
             const roomCode = document.getElementById('joinRoomCode').value.trim();
             if (!roomCode || roomCode.length !== 6) {
                 document.getElementById('roomStatus').innerHTML = '<div class="error">Please enter a valid 6-digit room code</div>';
                 return;
             }
 
-            const roomData = localStorage.getItem(`room_${roomCode}`);
-            if (!roomData) {
-                document.getElementById('roomStatus').innerHTML = '<div class="error">Room not found. Make sure the code is correct.</div>';
-                return;
-            }
+            try {
+                const roomDoc = await getDoc(doc(db, 'rooms', roomCode));
+                if (!roomDoc.exists()) {
+                    document.getElementById('roomStatus').innerHTML = '<div class="error">Room not found. Make sure the code is correct.</div>';
+                    return;
+                }
 
-            enterRoom(roomCode);
-            document.getElementById('roomStatus').innerHTML = '<div class="success">Joined room successfully!</div>';
+                enterRoom(roomCode);
+                document.getElementById('roomStatus').innerHTML = '<div class="success">Joined room successfully!</div>';
+
+            } catch (error) {
+                document.getElementById('roomStatus').innerHTML = `<div class="error">Failed to join room: ${error.message}</div>`;
+            }
         }
 
         function enterRoom(roomCode) {
@@ -327,47 +419,82 @@
             document.getElementById('chatInterface').classList.remove('hidden');
             document.getElementById('currentRoomCode').textContent = roomCode;
 
-            loadRoomData();
-            startRefreshInterval();
+            // Load existing messages from localStorage
+            loadMessagesFromStorage();
+            displayMessages(roomMessages);
+
+            startRoomListener();
+            incrementActiveUsers();
         }
 
-        function leaveRoom() {
-            if (refreshInterval) {
-                clearInterval(refreshInterval);
-                refreshInterval = null;
+        async function leaveRoom() {
+            if (unsubscribeRoom) {
+                unsubscribeRoom();
+                unsubscribeRoom = null;
             }
 
+            await decrementActiveUsers();
+
+            // Messages stay in localStorage - don't clear them
             currentRoom = null;
+            roomMessages = [];
             document.getElementById('roomSelection').classList.remove('hidden');
             document.getElementById('chatInterface').classList.add('hidden');
             document.getElementById('joinRoomCode').value = '';
             document.getElementById('roomStatus').innerHTML = '';
         }
 
-        function loadRoomData() {
-            const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`));
-            if (roomData) {
-                document.getElementById('myPublicKey').value = roomData.myPublicKey || '';
-                document.getElementById('contactPublicKey').value = roomData.contactPublicKey || '';
-                displayMessages(roomData.messages);
+        function clearRoomMessages() {
+            if (!currentRoom) return;
+
+            if (confirm('This will delete all stored messages for this room. Are you sure?')) {
+                localStorage.removeItem(`messages_${currentRoom}`);
+                roomMessages = [];
+                displayMessages(roomMessages);
             }
         }
 
-        function saveRoomData(updates) {
-            const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`)) || {};
-            Object.assign(roomData, updates);
-            localStorage.setItem(`room_${currentRoom}`, JSON.stringify(roomData));
+        async function incrementActiveUsers() {
+            try {
+                await updateDoc(doc(db, 'rooms', currentRoom), {
+                    activeUsers: arrayUnion(Date.now())
+                });
+            } catch (error) {
+                console.error('Error updating active users:', error);
+            }
         }
 
-        function saveMyPublicKey() {
+        async function decrementActiveUsers() {
+            if (!currentRoom) return;
+
+            try {
+                const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
+                if (roomDoc.exists()) {
+                    const data = roomDoc.data();
+                    // Could implement cleanup logic here if needed
+                }
+            } catch (error) {
+                console.error('Error updating active users:', error);
+            }
+        }
+
+        async function saveMyPublicKey() {
+            await waitForFirestore();
+
             const key = document.getElementById('myPublicKey').value.trim();
             if (!key) {
                 document.getElementById('myKeyStatus').innerHTML = '<div class="error">Please enter your public key</div>';
                 return;
             }
 
-            saveRoomData({ myPublicKey: key });
-            document.getElementById('myKeyStatus').innerHTML = '<div class="success">Your public key saved!</div>';
+            try {
+                await updateDoc(doc(db, 'rooms', currentRoom), {
+                    [`publicKeys.user_${Date.now()}`]: key
+                });
+                document.getElementById('myKeyStatus').innerHTML = '<div class="success">Your public key saved!</div>';
+            } catch (error) {
+                document.getElementById('myKeyStatus').innerHTML = `<div class="error">Failed to save key: ${error.message}</div>`;
+            }
         }
 
         function saveContactKey() {
@@ -377,12 +504,10 @@
                 return;
             }
 
-            saveRoomData({ contactPublicKey: key });
-            document.getElementById('contactKeyStatus').innerHTML = '<div class="success">Contact\'s key saved!</div>';
+            document.getElementById('contactKeyStatus').innerHTML = '<div class="success">Contact\'s key saved locally!</div>';
         }
 
         function saveDecryptionKey() {
-            // Just validate the key format
             const privateKey = document.getElementById('privateKey').value.trim();
             if (!privateKey) {
                 document.getElementById('decryptKeyStatus').innerHTML = '<div class="error">Please enter your private key</div>';
@@ -393,6 +518,8 @@
         }
 
         async function sendMessage() {
+            await waitForFirestore();
+
             const messageText = document.getElementById('newMessage').value.trim();
             const contactKey = document.getElementById('contactPublicKey').value.trim();
 
@@ -414,26 +541,55 @@
                     encryptionKeys: publicKey
                 });
 
-                // Add to room messages
-                const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`));
-                roomData.messages.push({
+                // Store message locally
+                const newMessage = {
                     timestamp: Date.now(),
                     encrypted: encrypted,
                     sender: 'you'
+                };
+
+                roomMessages.push(newMessage);
+                saveMessagesToStorage(); // Persist to localStorage
+                displayMessages(roomMessages);
+
+                // Atomic increment for accurate counting
+                await updateDoc(doc(db, 'rooms', currentRoom), {
+                    messageCount: increment(1),
+                    lastActivity: Date.now(),
+                    messageSignal: Date.now()
                 });
 
-                localStorage.setItem(`room_${currentRoom}`, JSON.stringify(roomData));
                 document.getElementById('newMessage').value = '';
-                displayMessages(roomData.messages);
 
             } catch (error) {
-                alert(`Encryption failed: ${error.message}`);
+                alert(`Failed to send message: ${error.message}`);
             }
+        }
+
+        function startRoomListener() {
+            const roomRef = doc(db, 'rooms', currentRoom);
+
+            unsubscribeRoom = onSnapshot(roomRef, (doc) => {
+                if (doc.exists()) {
+                    const data = doc.data();
+                    document.getElementById('messageStatus').textContent = `(${data.messageCount || 0} messages sent in this room)`;
+                } else {
+                    document.getElementById('messageStatus').textContent = '(Room not found)';
+                }
+            }, (error) => {
+                document.getElementById('messageStatus').textContent = '(Connection error)';
+                console.error('Room listener error:', error);
+            });
         }
 
         function displayMessages(messages) {
             const messagesDiv = document.getElementById('messages');
             messagesDiv.innerHTML = '';
+
+            if (messages.length === 0) {
+                messagesDiv.innerHTML = '<div style="color: #666; font-style: italic;">No messages yet. Messages are stored locally and persist across browser sessions.</div>';
+                return;
+            }
 
             messages.forEach((msg, index) => {
                 const messageDiv = document.createElement('div');
@@ -463,8 +619,7 @@
             }
 
             try {
-                const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`));
-                const message = roomData.messages[messageIndex];
+                const message = roomMessages[messageIndex];
 
                 // Decrypt the message
                 const decryptedKey = await openpgp.decryptKey({
@@ -484,22 +639,6 @@
                 document.getElementById(`decrypted_${messageIndex}`).innerHTML = `<span style="color: red;">Decryption failed: ${error.message}</span>`;
             }
         }
-
-        function refreshMessages() {
-            if (currentRoom) {
-                const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`));
-                if (roomData) {
-                    displayMessages(roomData.messages);
-                }
-            }
-        }
-
-        function startRefreshInterval() {
-            refreshInterval = setInterval(refreshMessages, 3000); // Refresh every 3 seconds
-        }
-
-        // Auto-refresh on page focus
-        window.addEventListener('focus', refreshMessages);
     </script>
 </body>
 
