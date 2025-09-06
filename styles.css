@@ -254,3 +254,25 @@ label {
         max-width: 95%;
     }
 }
+
+.privacy-info {
+    background-color: #f0f8ff;
+    border: 1px solid #b0c4de;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 4px;
+    text-align: left;
+}
+
+.privacy-info h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+.privacy-info p {
+    margin: 8px 0;
+    font-size: 14px;
+    line-height: 1.4;
+}

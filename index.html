@@ -35,6 +35,17 @@
 
         <div id="roomSelection" class="room-selection">
             <h2>Create or Join Chat Room</h2>
+        
+            <div class="privacy-info">
+                <h3>How it works:</h3>
+                <p><strong>Setup:</strong> Configure your keys once, then chat seamlessly</p>
+                <p><strong>Privacy:</strong> All encryption happens in your browser - keys are saved locally for this session
+                </p>
+                <p><strong>Database storage:</strong> Only encrypted messages are stored on the server to maintain chat history across
+                    sessions. Your private keys and decrypted messages never leave your browser. Message decryption and viewing happens
+                    entirely on your device.</p>
+            </div>
+        
             <div class="room-input">
                 <button onclick="createRoom()">Create New Room</button>
                 <span>or</span>
@@ -47,9 +58,7 @@
         <div id="chatInterface" class="hidden">
             <div class="instructions">
                 <strong>Room Code: <span id="currentRoomCode"></span></strong> (share this with your contacts)<br>
-                <strong>Setup:</strong> Configure your keys once, then chat seamlessly<br>
-                <strong>Privacy:</strong> All encryption happens in your browser - keys are saved locally for this
-                session
+                <strong>Ready to chat</strong>! Messages are secure and private
             </div>
 
             <div class="chat-area">
