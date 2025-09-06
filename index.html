@@ -290,7 +290,7 @@
                         <strong>Join as participant:</strong>
                         <input type="text" id="myName" placeholder="Your name in this room" style="margin-top: 5px;">
                         <textarea id="myPublicKey" class="key-input"
-                            placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;[your public key data]&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
+                            placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;your public key&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
                         <button onclick="joinAsParticipant()">Join Room as Participant</button>
                         <div id="myStatus"></div>
                     </div>
@@ -301,7 +301,7 @@
                         <input type="text" id="participantName" placeholder="Participant name (e.g., Alice, Bob)"
                             style="margin-top: 5px;">
                         <textarea id="newParticipantKey" class="key-input"
-                            placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;[participant's public key data]&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
+                            placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;&#10;participant's public key&#10;&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
                         <button onclick="addParticipant()">Add to Room</button>
                     </div>
 
@@ -319,7 +319,7 @@
                     <h2>Decrypt Messages</h2>
                     <label for="privateKey">Your Private Key:</label>
                     <textarea id="privateKey" class="key-input"
-                        placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----&#10;&#10;[your private key data]&#10;&#10;-----END PGP PRIVATE KEY BLOCK-----"></textarea>
+                        placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----&#10;&#10;your private key&#10;&#10;-----END PGP PRIVATE KEY BLOCK-----"></textarea>
                     <label for="passphrase">Passphrase (leave blank if no passphrase):</label>
                     <input type="password" id="passphrase" placeholder="Enter passphrase or leave blank...">
                     <button onclick="saveDecryptionKey()">Save Decryption Key</button>
