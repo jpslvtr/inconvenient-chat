@@ -106,7 +106,7 @@
         }
 
         .message-item.own {
-            background-color: #0000ff;
+            background-color: #4d79a4;
             color: white;
             margin-left: auto;
             text-align: right;
@@ -794,7 +794,14 @@
                     const data = doc.data();
                     displayMessages(data.messages || []);
                     displayParticipants(data.participants || {});
-                    document.getElementById('messageStatus').textContent = `(${data.messageCount || 0} total messages)`;
+
+                    // Count only messages visible to the current user
+                    if (isSetupComplete && myParticipantName) {
+                        const myMessages = (data.messages || []).filter(msg => msg.recipient === myParticipantName);
+                        document.getElementById('messageStatus').textContent = `(${myMessages.length} messages)`;
+                    } else {
+                        document.getElementById('messageStatus').textContent = `(${data.messageCount || 0} total messages)`;
+                    }
                 } else {
                     document.getElementById('messageStatus').textContent = '(Room not found)';
                 }
@@ -818,11 +825,11 @@
                 participantDiv.style.cssText = 'border-bottom: 1px solid #eee; padding: 8px; margin-bottom: 5px;';
                 const isYou = name === myParticipantName ? ' (you)' : '';
                 participantDiv.innerHTML = `
-                    <strong>${name}${isYou}</strong>
-                    <div style="font-size: 10px; color: #666; margin-top: 2px;">
-                        ${isYou ? 'Your identity' : 'Room participant'}
-                    </div>
-                `;
+                   <strong>${name}${isYou}</strong>
+                   <div style="font-size: 10px; color: #666; margin-top: 2px;">
+                       ${isYou ? 'Your identity' : 'Room participant'}
+                   </div>
+               `;
                 listDiv.appendChild(participantDiv);
             });
         }
@@ -870,12 +877,12 @@
                 const decryptedContent = await decryptMessageContent(msg.encrypted);
 
                 messageDiv.innerHTML = `
-                    <div class="message-time">${time}</div>
-                    ${!isOwnMessage ? `<div class="message-sender">${msg.sender}</div>` : ''}
-                    <div class="message-content">
-                        ${decryptedContent || '<em>Failed to decrypt</em>'}
-                    </div>
-                `;
+                   <div class="message-time">${time}</div>
+                   <div class="message-sender">${isOwnMessage ? 'You' : msg.sender}</div>
+                   <div class="message-content">
+                       ${decryptedContent || '<em>Failed to decrypt</em>'}
+                   </div>
+               `;
 
                 messagesDiv.appendChild(messageDiv);
             }
