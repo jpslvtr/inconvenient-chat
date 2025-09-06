@@ -431,47 +431,37 @@
             localStorage.setItem(`identity_${currentRoom}`, JSON.stringify(identityData));
         }
 
-        async function loadIdentityFromStorage() {
-            if (!currentRoom) return false;
+        async function checkIfKnownParticipant() {
+                if (!currentRoom || isSetupComplete) return;
 
-            const stored = localStorage.getItem(`identity_${currentRoom}`);
-            if (!stored) return false;
+                try {
+                    const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
+                    const roomData = roomDoc.data();
+                    const participants = roomData.participants || {};
 
-            try {
-                const identityData = JSON.parse(stored);
+                    // Only proceed if there are participants and setup is not complete
+                    const participantNames = Object.keys(participants);
 
-                // Restore identity
-                myParticipantName = identityData.name;
-                myPrivateKey = identityData.privateKey;
-                myPassphrase = identityData.passphrase || '';
+                    if (participantNames.length === 1) {
+                        const [name] = participantNames;
+                        const publicKey = participants[name];
 
-                // Decrypt the private key again
-                const parsedPrivateKey = await openpgp.readPrivateKey({ armoredKey: myPrivateKey });
-                if (parsedPrivateKey.isDecrypted()) {
-                    decryptedPrivateKey = parsedPrivateKey;
-                } else {
-                    decryptedPrivateKey = await openpgp.decryptKey({
-                        privateKey: parsedPrivateKey,
-                        passphrase: myPassphrase
-                    });
+                        // Pre-populate the form only if it's currently empty
+                        if (!document.getElementById('myName').value) {
+                            document.getElementById('myName').value = name;
+                        }
+                        if (!document.getElementById('myPublicKey').value) {
+                            document.getElementById('myPublicKey').value = publicKey;
+                        }
+
+                        // Show a helpful message
+                        document.getElementById('setupStatus').innerHTML = `<div style="background-color: #e6f3ff; border: 1px solid #ccc; padding: 10px; color: #666;">Found your details! "${name}" - just add your private key below.</div>`;
+                    }
+
+                } catch (error) {
+                    console.error('Error checking participants:', error);
                 }
-
-                isSetupComplete = true;
-
-                // Update UI
-                document.getElementById('setupForm').classList.add('hidden');
-                document.getElementById('setupComplete').classList.remove('hidden');
-                document.getElementById('displayName').textContent = myParticipantName;
-                document.getElementById('newMessage').disabled = false;
-                document.getElementById('sendButton').disabled = false;
-
-                return true;
-            } catch (error) {
-                console.error('Failed to load identity:', error);
-                localStorage.removeItem(`identity_${currentRoom}`);
-                return false;
             }
-        }
 
         async function createRoom() {
             await waitForFirestore();
