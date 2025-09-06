@@ -520,16 +520,21 @@
         }
 
         async function enterRoom(roomCode) {
-            currentRoom = roomCode;
-            document.getElementById('roomSelection').classList.add('hidden');
-            document.getElementById('chatInterface').classList.remove('hidden');
-            document.getElementById('currentRoomCode').textContent = roomCode;
+                currentRoom = roomCode;
+                document.getElementById('roomSelection').classList.add('hidden');
+                document.getElementById('chatInterface').classList.remove('hidden');
+                document.getElementById('currentRoomCode').textContent = roomCode;
 
-            startMessageListener();
+                startMessageListener();
 
-            // Try to load saved identity
-            await loadIdentityFromStorage();
-        }
+                // Try to load saved identity first
+                const identityLoaded = await loadIdentityFromStorage();
+
+                // If no saved identity, check if they're a known participant
+                if (!identityLoaded) {
+                    await checkIfKnownParticipant();
+                }
+            }
 
         async function leaveRoom() {
             if (unsubscribeMessages) {
@@ -855,6 +860,34 @@
 
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
+
+        async function checkIfKnownParticipant() {
+                if (!currentRoom) return;
+
+                try {
+                    const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
+                    const roomData = roomDoc.data();
+                    const participants = roomData.participants || {};
+
+                    // Check if there's only one participant (likely them)
+                    const participantNames = Object.keys(participants);
+
+                    if (participantNames.length === 1) {
+                        const [name] = participantNames;
+                        const publicKey = participants[name];
+
+                        // Pre-populate the form
+                        document.getElementById('myName').value = name;
+                        document.getElementById('myPublicKey').value = publicKey;
+
+                        // Show a helpful message
+                        document.getElementById('setupStatus').innerHTML = `<div style="background-color: #e6f3ff; border: 1px solid #ccc; padding: 10px; color: #666;">Found your details! "${name}" - just add your private key below.</div>`;
+                    }
+
+                } catch (error) {
+                    console.error('Error checking participants:', error);
+                }
+            }
     </script>
 </body>
 
