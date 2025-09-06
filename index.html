@@ -501,61 +501,71 @@
         }
 
         async function setupIdentity() {
-            const name = document.getElementById('myName').value.trim();
-            const publicKey = document.getElementById('myPublicKey').value.trim();
-            const privateKey = document.getElementById('myPrivateKey').value.trim();
-            const passphrase = document.getElementById('myPassphrase').value;
+                const name = document.getElementById('myName').value.trim();
+                const publicKey = document.getElementById('myPublicKey').value.trim();
+                const privateKey = document.getElementById('myPrivateKey').value.trim();
+                const passphrase = document.getElementById('myPassphrase').value;
 
-            if (!name || !publicKey || !privateKey) {
-                document.getElementById('setupStatus').innerHTML = '<div class="error">Please fill in name, public key, and private key</div>';
-                return;
-            }
-
-            if (!publicKey.includes('BEGIN PGP PUBLIC KEY') || !privateKey.includes('BEGIN PGP PRIVATE KEY')) {
-                document.getElementById('setupStatus').innerHTML = '<div class="error">Invalid key format - please check your keys</div>';
-                return;
-            }
-
-            try {
-                // Test private key decryption
-                decryptedPrivateKey = await openpgp.decryptKey({
-                    privateKey: await openpgp.readPrivateKey({ armoredKey: privateKey }),
-                    passphrase: passphrase
-                });
-
-                // Check if name already exists
-                const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
-                const roomData = roomDoc.data();
-                const participants = roomData.participants || {};
-
-                if (participants[name]) {
-                    document.getElementById('setupStatus').innerHTML = '<div class="error">Name already exists in this room - choose a different name</div>';
+                if (!name || !publicKey || !privateKey) {
+                    document.getElementById('setupStatus').innerHTML = '<div class="error">Please fill in name, public key, and private key</div>';
                     return;
                 }
 
-                // Save keys and add to participants
-                myPrivateKey = privateKey;
-                myPassphrase = passphrase;
-                myParticipantName = name;
-                isSetupComplete = true;
+                if (!publicKey.includes('BEGIN PGP PUBLIC KEY') || !privateKey.includes('BEGIN PGP PRIVATE KEY')) {
+                    document.getElementById('setupStatus').innerHTML = '<div class="error">Invalid key format - please check your keys</div>';
+                    return;
+                }
 
-                await updateDoc(doc(db, 'rooms', currentRoom), {
-                    [`participants.${name}`]: publicKey
-                });
+                try {
+                    // Read the private key first
+                    const parsedPrivateKey = await openpgp.readPrivateKey({ armoredKey: privateKey });
 
-                // Update UI
-                document.getElementById('setupForm').classList.add('hidden');
-                document.getElementById('setupComplete').classList.remove('hidden');
-                document.getElementById('displayName').textContent = name;
-                document.getElementById('newMessage').disabled = false;
-                document.getElementById('sendButton').disabled = false;
+                    // Check if the key is already decrypted (no passphrase protection)
+                    if (parsedPrivateKey.isDecrypted()) {
+                        decryptedPrivateKey = parsedPrivateKey;
+                    } else {
+                        // Only decrypt if it's encrypted (has passphrase protection)
+                        decryptedPrivateKey = await openpgp.decryptKey({
+                            privateKey: parsedPrivateKey,
+                            passphrase: passphrase
+                        });
+                    }
 
-                document.getElementById('setupStatus').innerHTML = '<div class="success">Setup complete! You can now send messages.</div>';
+                    // Check if name already exists in the room
+                    const roomDoc = await getDoc(doc(db, 'rooms', currentRoom));
+                    const roomData = roomDoc.data();
+                    const participants = roomData.participants || {};
 
-            } catch (error) {
-                document.getElementById('setupStatus').innerHTML = `<div class="error">Setup failed: ${error.message}. Check your private key and passphrase.</div>`;
+                    if (participants[name]) {
+                        document.getElementById('setupStatus').innerHTML = '<div class="error">Name already exists in this room - choose a different name</div>';
+                        return;
+                    }
+
+                    // Save keys and participant info
+                    myPrivateKey = privateKey;
+                    myPassphrase = passphrase;
+                    myParticipantName = name;
+                    isSetupComplete = true;
+
+                    // Add to room participants
+                    await updateDoc(doc(db, 'rooms', currentRoom), {
+                        [`participants.${name}`]: publicKey
+                    });
+
+                    // Update UI
+                    document.getElementById('setupForm').classList.add('hidden');
+                    document.getElementById('setupComplete').classList.remove('hidden');
+                    document.getElementById('displayName').textContent = name;
+                    document.getElementById('newMessage').disabled = false;
+                    document.getElementById('sendButton').disabled = false;
+
+                    document.getElementById('setupStatus').innerHTML = '<div class="success">Setup complete! You can now send messages.</div>';
+
+                } catch (error) {
+                    console.error('Setup error:', error);
+                    document.getElementById('setupStatus').innerHTML = `<div class="error">Setup failed: ${error.message}. Check your private key and passphrase.</div>`;
+                }
             }
-        }
 
         function editIdentity() {
             document.getElementById('setupForm').classList.remove('hidden');
