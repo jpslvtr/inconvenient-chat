@@ -1,7 +1,7 @@
 # inconvenient-chat
 
 A minimal, end-to-end encrypted group chat. All encryption and decryption
-happen in your browser using PGP — the server only ever stores ciphertext.
+happen in your browser using PGP - the server only ever stores ciphertext.
 
 ## How it works
 
@@ -30,7 +30,7 @@ Opening `index.html` directly also works in most browsers.
 
 - [OpenPGP.js](https://openpgpjs.org/) for in-browser encryption
 - Firebase Firestore for encrypted message storage and realtime sync
-- Plain HTML / CSS / JavaScript — no build step
+- Plain HTML / CSS / JavaScript - no build step
 
 ## Note on Firebase config
 
